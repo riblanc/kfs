@@ -49,6 +49,7 @@ SRC = linker.ld \
 	ft/io/reader.zig \
 	ft/io/writer.zig \
 	ft/io.zig \
+	ft/linked_list.zig \
 	ft/math.zig \
 	ft/mem.zig \
 	ft/meta.zig \
