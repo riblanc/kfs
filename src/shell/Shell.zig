@@ -16,6 +16,7 @@ pub fn Shell(comptime _builtins: anytype) type {
         const Self = @This();
 
         const Hook: type = ?*const fn (*Self) void;
+
         const Hooks: type = struct {
             on_init: Hook = null,
             on_error: Hook = defaultErrorHook,
@@ -147,7 +148,7 @@ pub fn Shell(comptime _builtins: anytype) type {
                 error.InvalidParameter,
                 error.InvalidQuote,
                 => shell.print_error("{s}", .{shell.strerror(err)}),
-                else => shell.print_error("Unknown error", .{}),
+                else => shell.print_error("Unknown error: {s}", .{@errorName(err)}),
             }
         }
     };

@@ -4,9 +4,22 @@ ISO?=$(NAME).iso
 
 ISODIR?=iso
 
-BOOTDIR?=$(ISODIR)/boot
+OPTIMIZE=ReleaseSafe
 
-BIN?=$(BOOTDIR)/bin/$(NAME).elf
+ifeq ($(CI), 1)
+    ISODIR=CI/iso
+    OPTIMIZE=Debug
+    QEMU_ARGS=-serial tcp::4444,server,nowait
+    BUILD_ARGS+=-Dci=true
+else
+    CI=0
+endif
+
+BOOTDIR?=boot
+BOOTDIR:=${ISODIR}/$(BOOTDIR)
+
+BIN?=bin/$(NAME).elf
+BIN:=$(BOOTDIR)/$(BIN)
 
 ZIG_CACHE?=.cache
 
@@ -20,6 +33,7 @@ SRC = linker.ld \
 	../Makefile \
 	../build.zig \
 	boot.zig \
+	ci.zig \
 	cpu.zig \
 	interrupts.zig \
 	logger.zig \
@@ -31,6 +45,7 @@ SRC = linker.ld \
 	drivers/pic/pic.zig \
 	drivers/acpi/types/acpi.zig \
 	drivers/acpi/types/s5.zig \
+	drivers/serial_port/serial.zig \
 	drivers/vga/text.zig \
 	memory.zig \
 	memory/bitmap.zig \
@@ -76,12 +91,15 @@ SRC = linker.ld \
 	ft/Random.zig \
 	ft/Random/Xoroshiro128.zig \
 	ft/meta.zig \
+	shell/Shell.zig \
 	shell/token.zig \
+	shell/utils.zig \
+	shell/ci/builtins.zig \
+	shell/ci/packet.zig \
+	shell/ci/shell.zig \
 	shell/default/builtins.zig \
 	shell/default/helpers.zig \
-	shell/default/utils.zig \
 	shell/default/shell.zig \
-	shell/Shell.zig \
 	$(THEME_INDEX)
 
 THEME_LIST = themes
@@ -98,6 +116,7 @@ SYMBOL_FILE = $(SYMBOL_DIR)/$(NAME).symbols
 DOCKER_CMD ?= docker
 
 DOCKER_STAMP = .zig-docker
+CI_STAMP = .iso-ci
 
 all: $(ISO)
 
@@ -109,42 +128,64 @@ GRUB_MKRESCUE = grub-mkrescue
 else
 
 $(BIN): $(DOCKER_STAMP)
-ZIG = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw -ti zig zig
+ZIG = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw zig zig
 
 $(ISO): $(DOCKER_STAMP)
-GRUB_MKRESCUE = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw -ti zig grub-mkrescue
+GRUB_MKRESCUE = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw zig grub-mkrescue
+
+format: $(DOCKER_STAMP)
 
 endif
 
-$(ISO): $(BIN) $(GRUB_CONF)
+$(ISO): $(BIN) $(GRUB_CONF) | $(CI_STAMP).$(CI)
 	$(GRUB_MKRESCUE) --compress=xz -o $@ $(ISODIR)
 
 run: $(ISO)
-	qemu-system-$(ARCH) -cdrom $<
+	qemu-system-$(ARCH) -cdrom $< $(QEMU_ARGS)
 
 run_kernel: $(BIN)
 	qemu-system-$(ARCH) -kernel $<
 
-$(DOCKER_STAMP): dockerfile
-	$(DOCKER_CMD) build -t zig .
-	$(DOCKER_CMD) volume create --name $(NAME) --driver=local --opt type=none --opt device=$(PWD) --opt o=bind,uid=$(shell id -u)
+$(DOCKER_STAMP): dockerfile | docker_volume
+	$(DOCKER_CMD) build -t zig . -f dockerfile
 	> $(DOCKER_STAMP)
 
+docker_volume:
+	$(DOCKER_CMD) volume rm $(NAME) || true
+	$(DOCKER_CMD) volume create --name $(NAME) --driver=local --opt type=none --opt device=$(PWD) --opt o=bind,uid=$(shell id -u)
+
+$(CI_STAMP).$(CI):
+	rm -rf $(CI_STAMP).*
+	touch $@
+
+format:
+	ZIG="$(ZIG)" .github/pre-commit
 
 $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 	$(ZIG) build \
 		--prefix $(BOOTDIR) \
 		-Dname=$(notdir $(BIN)) \
-		-Doptimize=ReleaseSafe \
+		-Doptimize=$(OPTIMIZE) \
 		--cache-dir $(ZIG_CACHE) \
 		--summary all \
+		-freference-trace \
 		--verbose \
-		$(ZIG_ARGS)
+		$(BUILD_ARGS)
 
 
 debug: all $(SYMBOL_FILE)
 	( qemu-system-$(ARCH) -cdrom $(ISO) -s -S 1>/dev/null 2>/dev/null \
 	|	gdb  -ex "file $(BIN)" -ex "target remote localhost:1234" <&3 ) 3<&0
+
+ifeq ($(MAKELEVEL), 0)
+ci:
+	$(MAKE) DOCKER=1 CI=1 ci
+else
+ci: all
+	bash CI/run_ci.sh
+endif
+
+
 
 $(SYMBOL_DIR):
 	mkdir -p $(SYMBOL_DIR)
@@ -181,4 +222,4 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: run all clean fclean re debug run_kernel
+.PHONY: run all clean fclean re debug run_kernel docker_volume ci format
