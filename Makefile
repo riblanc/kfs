@@ -91,15 +91,15 @@ SRC = linker.ld \
 	ft/Random.zig \
 	ft/Random/Xoroshiro128.zig \
 	ft/meta.zig \
+	shell/Shell.zig \
 	shell/token.zig \
+	shell/utils.zig \
 	shell/ci/builtins.zig \
 	shell/ci/packet.zig \
 	shell/ci/shell.zig \
 	shell/default/builtins.zig \
 	shell/default/helpers.zig \
-	shell/default/utils.zig \
 	shell/default/shell.zig \
-	shell/Shell.zig \
 	$(THEME_INDEX)
 
 THEME_LIST = themes
