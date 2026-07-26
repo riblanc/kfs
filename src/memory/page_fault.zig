@@ -7,6 +7,7 @@ const mapping = @import("mapping.zig");
 const scheduler = @import("../task/scheduler.zig");
 const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
 const TaskDescriptor = @import("../task/task.zig").TaskDescriptor;
+const Code = @import("../task/signal.zig").Code;
 
 const PageFault = struct {
     present: bool,
@@ -73,7 +74,7 @@ fn kernel_page_fault(fault: PageFault) void {
 fn segmentation_fault(task: *TaskDescriptor, fault: PageFault) void {
     task.send_signal(.{
         .si_signo = .{ .valid = .SIGSEGV },
-        .si_code = if (fault.present) .SEGV_ACCERR else .SEGV_MAPERR,
+        .si_code = if (fault.present) Code.SEGV_ACCERR else Code.SEGV_MAPERR,
         .si_pid = 0,
         .si_addr = fault.faulting_address,
         // todo set more fields of siginfo

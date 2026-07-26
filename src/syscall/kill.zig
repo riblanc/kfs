@@ -12,7 +12,7 @@ pub fn do(pid: task.TaskDescriptor.Pid, id: signal.Id) !void {
         // todo permisssion
         descriptor.send_signal(.{
             .si_signo = .{ .valid = id },
-            .si_code = .SI_USER,
+            .si_code = signal.Code.SI_USER,
             .si_pid = scheduler.get_current_task().pid,
             // todo set more fields of siginfo
         });

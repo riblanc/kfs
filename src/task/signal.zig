@@ -58,15 +58,51 @@ pub const Id = enum(u32) {
     SIGXFSZ = 31,
 };
 
-pub const Code = enum(u32) {
-    SI_USER,
-    SEGV_ACCERR,
-    SEGV_MAPERR,
+/// si_code is read relative to si_signo: 1 means SEGV_MAPERR under SIGSEGV and
+/// ILL_ILLOPC under SIGILL. One namespace per signal rather than a flat enum,
+/// which could not hold values that collide by design.
+///
+/// Values are part of the userspace ABI, so they are spelled out here and must
+/// match what mlibc's abi-bits declares.
+pub const Code = struct {
+    /// Sent by kill() and friends. Valid whatever the signal.
+    pub const SI_USER: i32 = 0;
+    /// Raised by the kernel with no more precise code. Not POSIX, but POSIX
+    /// leaves #GP and its neighbours without one.
+    pub const SI_KERNEL: i32 = 0x80;
+
+    pub const ILL_ILLOPC: i32 = 1;
+    pub const ILL_ILLOPN: i32 = 2;
+    pub const ILL_ILLADR: i32 = 3;
+    pub const ILL_ILLTRP: i32 = 4;
+    pub const ILL_PRVOPC: i32 = 5;
+    pub const ILL_PRVREG: i32 = 6;
+    pub const ILL_COPROC: i32 = 7;
+    pub const ILL_BADSTK: i32 = 8;
+
+    pub const FPE_INTDIV: i32 = 1;
+    pub const FPE_INTOVF: i32 = 2;
+    pub const FPE_FLTDIV: i32 = 3;
+    pub const FPE_FLTOVF: i32 = 4;
+    pub const FPE_FLTUND: i32 = 5;
+    pub const FPE_FLTRES: i32 = 6;
+    pub const FPE_FLTINV: i32 = 7;
+    pub const FPE_FLTSUB: i32 = 8;
+
+    pub const SEGV_MAPERR: i32 = 1;
+    pub const SEGV_ACCERR: i32 = 2;
+
+    pub const BUS_ADRALN: i32 = 1;
+    pub const BUS_ADRERR: i32 = 2;
+    pub const BUS_OBJERR: i32 = 3;
+
+    pub const TRAP_BRKPT: i32 = 1;
+    pub const TRAP_TRACE: i32 = 2;
 };
 
 pub const siginfo_t = extern struct {
     si_signo: Signo = Signo.invalid,
-    si_code: Code = undefined,
+    si_code: i32 = undefined,
     si_errno: u32 = undefined,
     si_pid: TaskDescriptor.Pid = undefined, // todo pid type
     // si_uid
