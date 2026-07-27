@@ -1,5 +1,5 @@
 const std = @import("std");
-const tty = @import("../../tty/tty.zig");
+const tty = @import("../../device/tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("../utils.zig");
 const CmdError = @import("../Shell.zig").CmdError;
@@ -7,7 +7,7 @@ const colors = @import("colors");
 const scheduler = @import("../../task/scheduler.zig");
 const strerror = @import("../../errno.zig").strerror;
 
-// TODO Replace printk with format(shell.writer, format, args)...
+// TODO Replace printk with format(shell.writer(), format, args)...
 // As this builtin definitions are only used with graphic mode, it's ok to use printk for now
 const printk = tty.printk;
 
@@ -65,7 +65,7 @@ pub fn elf(_: anytype, _: [][]u8) CmdError!void {
 }
 
 pub fn keymap(_: anytype, args: [][]u8) CmdError!void {
-    const km = @import("../../tty/keyboard/keymap.zig");
+    const km = @import("../../drivers/input/keyboard/keymap.zig");
     switch (args.len) {
         1 => {
             const list = km.keymap_list;
@@ -81,7 +81,8 @@ pub fn keymap(_: anytype, args: [][]u8) CmdError!void {
 }
 
 pub fn theme(_: anytype, args: [][]u8) CmdError!void {
-    const t = @import("../../tty/themes.zig");
+    const t = @import("../../drivers/tty/themes.zig");
+    const vt = @import("../../drivers/tty/vt_console.zig");
     switch (args.len) {
         1 => {
             const list = t.theme_list;
@@ -94,7 +95,9 @@ pub fn theme(_: anytype, args: [][]u8) CmdError!void {
             utils.show_palette();
         },
         2 => {
-            tty.get_tty().set_theme(t.get_theme(args[1]) orelse return CmdError.InvalidParameter);
+            vt.consoles[@import("../../device/tty/tty.zig").current_tty].set_theme(
+                t.get_theme(args[1]) orelse return CmdError.InvalidParameter,
+            );
             printk("\x1b[2J\x1b[H", .{});
             utils.show_palette();
         },
@@ -258,7 +261,7 @@ pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
     var buffer: [4096]u8 = undefined;
     return utils.fuzz(
         @import("../../memory.zig").directMemory.allocator(),
-        @constCast(&shell.writer.adaptToNewApi(&buffer).new_interface),
+        @constCast(&shell.writer().adaptToNewApi(&buffer).new_interface),
         nb,
         max_size,
         false,
@@ -278,7 +281,7 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
     var buffer: [4096]u8 = undefined;
     return utils.fuzz(
         @import("../../memory.zig").bigAlloc.allocator(),
-        @constCast(&shell.writer.adaptToNewApi(&buffer).new_interface),
+        @constCast(&shell.writer().adaptToNewApi(&buffer).new_interface),
         nb,
         max_size,
         false,
@@ -386,6 +389,9 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
             };
             const new_task = @import("../../task/task_set.zig").create_task() catch
                 @panic("Failed to create new_task");
+            // Own process group, so the terminal can signal the routine without
+            // hitting the shell that is waiting for it.
+            new_task.pgid = new_task.pid;
             new_task.spawn(&poc.enter_demo, @intFromPtr(&req)) catch
                 @panic("Failed to spawn new_task");
             utils.waitpid(shell, new_task.pid);
@@ -422,7 +428,7 @@ pub fn pci(shell: anytype, args: [][]u8) CmdError!void {
                 utils.print_error(shell, "No device found ({}:{}.{})", .{ bus, dev, func });
                 break :b CmdError.InvalidParameter;
             };
-            device.printInfo(shell.writer);
+            device.printInfo(shell.writer());
         },
         else => CmdError.InvalidNumberOfArguments,
     };
@@ -432,16 +438,16 @@ pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
     const block = @import("../../device/block/registry.zig");
     const char = @import("../../device/char/registry.zig");
 
-    char.show_char_dev(shell.writer);
-    _ = shell.writer.write("\n") catch {};
+    char.show_char_dev(shell.writer());
+    _ = shell.writer().write("\n") catch {};
 
-    block.show_block_dev(shell.writer);
+    block.show_block_dev(shell.writer());
 }
 
 pub fn partitions(shell: anytype, _: [][]u8) CmdError!void {
     const block = @import("../../device/block/registry.zig");
 
-    block.show_partitions(shell.writer);
+    block.show_partitions(shell.writer());
 }
 
 pub fn lsblk(shell: anytype, args: [][]u8) CmdError!void {
@@ -449,7 +455,7 @@ pub fn lsblk(shell: anytype, args: [][]u8) CmdError!void {
 
     // lsblk [device_name]
     const filter: ?[]const u8 = if (args.len >= 2) args[1] else null;
-    block.show_lsblk(shell.writer, filter);
+    block.show_lsblk(shell.writer(), filter);
 }
 
 pub fn lookup_devt(shell: anytype, args: [][]u8) CmdError!void {
@@ -571,7 +577,7 @@ pub fn lschar(shell: anytype, args: [][]u8) CmdError!void {
     const char_reg = @import("../../device/char/registry.zig");
 
     const filter: ?[]const u8 = if (args.len >= 2) args[1] else null;
-    char_reg.show_lschar(shell.writer, filter);
+    char_reg.show_lschar(shell.writer(), filter);
 }
 
 const ext2 = @import("../../fs/ext2/driver.zig").fs;
@@ -995,7 +1001,7 @@ pub fn test_elf(shell: anytype, args: [][]u8) CmdError!void {
         return CmdError.OtherError;
     };
 
-    shell.writer.print("ELF file {s} is valid\n", .{args[1]}) catch {};
+    shell.print("ELF file {s} is valid\n", .{args[1]});
 
     // Create a task to load the elf and print the mapped regions
     const req = smallAlloc.create(TestLoadRequest) catch return CmdError.OtherError;
@@ -1009,9 +1015,9 @@ pub fn test_elf(shell: anytype, args: [][]u8) CmdError!void {
     switch (req.result) {
         .ok => |ok| {
             defer smallAlloc.free(ok.regions);
-            shell.writer.print("entry=0x{x} phdr_vaddr=0x{x}\n", .{ ok.entry, ok.phdr_vaddr }) catch {};
+            shell.writer().print("entry=0x{x} phdr_vaddr=0x{x}\n", .{ ok.entry, ok.phdr_vaddr }) catch {};
             for (ok.regions) |r| {
-                shell.writer.print("region [0x{x}, 0x{x}) r={} w={}\n", .{ r.begin, r.end, r.r, r.w }) catch {};
+                shell.writer().print("region [0x{x}, 0x{x}) r={} w={}\n", .{ r.begin, r.end, r.r, r.w }) catch {};
             }
         },
         .err => |e| {

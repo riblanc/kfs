@@ -1,4 +1,4 @@
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 const scheduler = @import("../task/scheduler.zig");
 const TaskDescriptor = @import("../task/task.zig").TaskDescriptor;
 pub const Id = 19;

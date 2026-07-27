@@ -76,7 +76,7 @@ export fn init(eax: u32, ebx: u32) callconv(.c) noreturn {
 
 /// Low-level CPU, chipset and memory initialization.
 fn init_hardware() void {
-    @import("tty/tty.zig").init();
+    @import("drivers/tty/vt_console.zig").init();
     log.info("Terminal initialized", .{});
 
     @import("gdt.zig").init();
@@ -99,7 +99,7 @@ fn init_hardware() void {
 /// Drivers, kernel services and device initialization.
 fn init_subsystems() void {
     @import("drivers/ps2/ps2.zig").init();
-    @import("tty/keyboard.zig").init();
+    @import("drivers/input/keyboard/keyboard.zig").init();
     @import("./drivers/acpi/acpi.zig").init();
     @import("syscall.zig").init();
 
@@ -112,6 +112,8 @@ fn init_subsystems() void {
     @import("device/block/registry.zig").init();
     @import("device/char/registry.zig").init();
     @import("drivers/char/mem.zig").init();
+    @import("drivers/tty/tty_cdev.zig").init();
+    @import("drivers/tty/serial_tty.zig").init();
 
     @import("drivers/pci/pci.zig").init() catch @panic("Failed to initialize PCI subsystem");
     @import("drivers/ide/ide.zig").init() catch @panic("Failed to initialize IDE subsystem");
@@ -151,6 +153,11 @@ fn init_tasks() noreturn {
 /// then becomes the idle loop.
 fn idle_entry() callconv(.c) noreturn {
     @import("fs/vfs.zig").init() catch @panic("Cannot initialize vfs");
+
+    const input_task = @import("task/task_set.zig").create_task() catch
+        @panic("Failed to create input task");
+    input_task.spawn(&@import("device/tty/tty.zig").input_task, undefined) catch
+        @panic("Failed to spawn input task");
 
     const kernel_task = @import("task/task_set.zig").create_task() catch
         @panic("Failed to create kernel task");

@@ -1,17 +1,18 @@
 const std = @import("std");
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 const scheduler = @import("../task/scheduler.zig");
 const TaskDescriptor = @import("../task/task.zig").TaskDescriptor;
 pub const Id = 2;
 
-/// Write to the tty in red, restoring whatever color was current.
+/// Write to the tty in red. Going through escape sequences rather than the
+/// console state keeps this working on a serial line too.
 fn write_stderr(data: []const u8) usize {
-    const current = tty.get_tty();
-    const saved = current.current_color;
-    defer current.current_color = saved;
-
-    current.set_font_color(.red);
-    return tty.get_writer().write(data) catch unreachable;
+    const colors = @import("colors");
+    const writer = tty.get_writer();
+    _ = writer.write(colors.red) catch {};
+    const written = writer.write(data) catch unreachable;
+    _ = writer.write(colors.reset) catch {};
+    return written;
 }
 
 pub fn do(fd: TaskDescriptor.Fd, buf: [*]align(1) const u8, len: usize) !usize {

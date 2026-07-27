@@ -1,23 +1,23 @@
 const utils = @import("../utils.zig");
 pub const Shell = @import("../Shell.zig").Shell(@import("builtins.zig"));
 const colors = @import("colors");
-const tty = @import("../../tty/tty.zig");
+const tty = @import("../../device/tty/tty.zig");
 
 pub var cwd: []const u8 = undefined;
 
 pub fn on_init(shell: *Shell) void {
-    shell.writer.print("tty {d}, Hello {s}{d}{s}\n", .{
-        @import("../../tty/tty.zig").current_tty,
+    shell.writer().print("tty {d}, Hello {s}{d}{s}\n", .{
+        @import("../../device/tty/tty.zig").current_tty,
         colors.green,
         42,
         colors.reset,
     }) catch {};
-    tty.get_tty().config.c_lflag.ECHOCTL = true;
+    shell.tty.config.c_lflag.ECHOCTL = true;
     cwd = @import("../../memory.zig").smallAlloc.allocator().dupe(u8, "/") catch unreachable;
 }
 
 pub fn on_error(shell: *Shell) void {
-    utils.ensure_newline(shell.writer);
+    utils.ensure_newline(shell.writer());
     shell.defaultErrorHook();
 }
 
@@ -27,5 +27,5 @@ pub fn pre_process(shell: *Shell) void {
 }
 
 pub fn pre_cmd(shell: *Shell) void {
-    utils.ensure_newline(shell.writer);
+    utils.ensure_newline(shell.writer());
 }

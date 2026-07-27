@@ -1,6 +1,6 @@
 const std = @import("std");
 const Alignment = std.mem.Alignment;
-const printk = @import("../../../tty/tty.zig").printk;
+const printk = @import("../../../device/tty/tty.zig").printk;
 const PageAllocator = @import("../../page_allocator.zig");
 const paging = @import("../../paging.zig");
 const pfd_t = paging.page_frame_descriptor;

@@ -1,5 +1,5 @@
 const std = @import("std");
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 const StackIterator = std.debug.StackIterator;
 
 const c = @import("colors");
@@ -15,16 +15,16 @@ pub fn ensure_newline(writer: std.io.AnyWriter) void {
 }
 
 pub fn print_error(shell: anytype, comptime msg: []const u8, args: anytype) void {
-    ensure_newline(shell.writer);
-    shell.writer.print(c.red ++ "Error" ++ c.reset ++ ": " ++ msg ++ "\n", args) catch {};
+    ensure_newline(shell.writer());
+    shell.writer().print(c.red ++ "Error" ++ c.reset ++ ": " ++ msg ++ "\n", args) catch {};
 }
 
 pub fn print_prompt(shell: anytype) void {
-    ensure_newline(shell.writer);
+    ensure_newline(shell.writer());
 
     // print the prompt:
     // prompt collor depending on the last command status
-    shell.writer.print("{s}{s}" ++ c.reset ++ " ", .{
+    shell.writer().print("{s}{s}" ++ c.reset ++ " ", .{
         if (shell.execution_context.err != null) c.red else c.cyan,
         prompt,
     }) catch {};
@@ -216,6 +216,12 @@ pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth:
 const SignalId = @import("../task/signal.zig").Id;
 
 pub fn waitpid(shell: anytype, pid: i32) void {
+    // The awaited task's group runs in the foreground, so it is the one the
+    // terminal signals. Give the terminal back once it is over.
+    const awaited = @import("../task/task_set.zig").get_task_descriptor(pid);
+    const previous = tty.get_tty().set_foreground_pgid(if (awaited) |t| t.pgid else pid);
+    defer _ = tty.get_tty().set_foreground_pgid(previous);
+
     var status: @import("../task/wait.zig").Status = undefined;
     const ret = @import("../task/wait.zig").wait(
         pid,
