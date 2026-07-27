@@ -409,6 +409,10 @@ pub const TaskDescriptor = struct {
 
     pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.c) noreturn {
         const function: *const fn (usize) u8 = @ptrCast(function_ptr);
+        // A task about to run must not stay queued. It matters when spawn is
+        // called on the current task, as commit_exec does: checkpoint pushed it
+        // to be resumable, and it is resuming right here.
+        ready_queue.remove(self);
         self.state = .Running;
         scheduler.set_current_task(self);
         gdt.tss.esp0 = self.stack_top();
