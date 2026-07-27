@@ -437,14 +437,35 @@ pub fn TtyN(comptime history_size: u32) type {
             self.view();
         }
 
+        /// Bytes that have to accumulate before a read returns. Canonical mode
+        /// needs one, since the line discipline only publishes a line once it is
+        /// complete. Otherwise VMIN says how many, and 0 means return with
+        /// whatever is already there.
+        fn read_min(self: *const Self) usize {
+            if (self.config.c_lflag.ICANON) return 1;
+            return self.config.c_cc[@intFromEnum(termios.cc_index.VMIN)];
+        }
+
+        /// Whether a reader has to wait: nothing readable, and room left to
+        /// receive more.
+        fn read_should_wait(self: *const Self) bool {
+            return self.read_tail == self.current_line_begin and
+                self.read_head +% 1 != self.read_tail;
+        }
+
         /// read bytes from the terminal and store them in s, suitable for use with std.io.Reader
         pub fn read(self: *Self, s: []u8) Self.ReadError!usize {
-            // todo time/min
+            // The read returns once `min` bytes have accumulated, one condition
+            // for canonical mode and VMIN alike.
+            // todo VTIME: without a timed wait, VMIN alone decides.
+            const min = @min(self.read_min(), s.len);
             var count: usize = 0;
+
             for (s) |*c| {
-                // The input task fills the buffer, so waiting for an interrupt
-                // is enough. todo: block on a reader wait queue instead.
-                while (self.read_tail == self.current_line_begin and self.read_head +% 1 != self.read_tail) {
+                while (self.read_should_wait()) {
+                    if (count >= min) return count;
+                    // The input task fills the buffer, so waiting for an
+                    // interrupt is enough. todo: block on a reader wait queue.
                     @import("../cpu.zig").halt();
                 }
 
