@@ -442,9 +442,10 @@ pub fn TtyN(comptime history_size: u32) type {
             // todo time/min
             var count: usize = 0;
             for (s) |*c| {
+                // The input task fills the buffer, so waiting for an interrupt
+                // is enough. todo: block on a reader wait queue instead.
                 while (self.read_tail == self.current_line_begin and self.read_head +% 1 != self.read_tail) {
                     @import("../cpu.zig").halt();
-                    keyboard.kb_read();
                 }
 
                 c.* = self.input_buffer[self.read_tail];

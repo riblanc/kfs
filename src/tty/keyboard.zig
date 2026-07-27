@@ -59,6 +59,27 @@ fn send_to_buffer(scan_code: u16) void {
     }
 }
 
+fn has_scancode(_: *void, _: ?*void) bool {
+    return incount != 0;
+}
+
+/// Woken by the interrupt, drained by the input task. Nothing sleeps here but
+/// that task, so a wake up with an empty buffer costs nothing.
+var input_queue: wait_queue.WaitQueue(.{ .predicate = has_scancode }) = .{};
+
+/// Turn buffered scancodes into terminal input, forever.
+///
+/// The interrupt only fills the scancode buffer. Translation, line discipline,
+/// echo and the signals a control character generates all run here, in task
+/// context, so none of it happens with interrupts disabled or on the interrupt
+/// stack. It also means input is processed whether or not anyone is reading.
+pub fn input_task(_: usize) u8 {
+    while (true) {
+        input_queue.block_no_int(scheduler.get_current_task(), null);
+        kb_read();
+    }
+}
+
 fn make_break(scancode: u16) ?u16 {
     var c = scancode & 0x7FFF;
     const make: bool = !(scancode & 0x8000 != 0);
@@ -139,6 +160,8 @@ pub fn kb_read() void {
 }
 
 const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
+const wait_queue = @import("../task/wait_queue.zig");
+const scheduler = @import("../task/scheduler.zig");
 
 pub fn handler(_: InterruptFrame) void {
     const scan_code: u8 = ps2.get_data();
@@ -163,6 +186,7 @@ pub fn handler(_: InterruptFrame) void {
         },
     };
     pic.ack(.Keyboard);
+    input_queue.try_unblock();
 }
 
 fn is_key_available() bool {
