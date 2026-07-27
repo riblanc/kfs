@@ -8,6 +8,8 @@ const themes = @import("themes.zig");
 const cp437 = @import("cp437.zig");
 const signal = @import("../task/signal.zig");
 const task_set = @import("../task/task_set.zig");
+const wait_queue = @import("../task/wait_queue.zig");
+const scheduler = @import("../task/scheduler.zig");
 const Pid = @import("../task/task.zig").TaskDescriptor.Pid;
 
 /// The colors available for the console
@@ -106,6 +108,9 @@ pub fn TtyN(comptime history_size: u32) type {
         /// Null until something claims the terminal.
         foreground_pgid: ?Pid = null,
 
+        /// Readers waiting for the line discipline to publish something.
+        read_queue: wait_queue.WaitQueue(.{ .predicate = input_ready }) = .{},
+
         const input_buffer_pos_t = std.meta.Int(.unsigned, std.math.log2(MAX_INPUT)); // todo: is this the right type?
 
         /// Writer object type
@@ -185,6 +190,7 @@ pub fn TtyN(comptime history_size: u32) type {
         pub fn input(self: *Self, s: []const u8) void {
             for (s) |c| self.input_char(c);
             self.local_processing();
+            self.read_queue.try_unblock();
         }
 
         /// Signal a control character generates, or null when it generates none.
@@ -446,6 +452,11 @@ pub fn TtyN(comptime history_size: u32) type {
             return self.config.c_cc[@intFromEnum(termios.cc_index.VMIN)];
         }
 
+        fn input_ready(_: *void, data: ?*void) bool {
+            const self: *Self = @ptrCast(@alignCast(data.?));
+            return !self.read_should_wait();
+        }
+
         /// Whether a reader has to wait: nothing readable, and room left to
         /// receive more.
         fn read_should_wait(self: *const Self) bool {
@@ -464,9 +475,11 @@ pub fn TtyN(comptime history_size: u32) type {
             for (s) |*c| {
                 while (self.read_should_wait()) {
                     if (count >= min) return count;
-                    // The input task fills the buffer, so waiting for an
-                    // interrupt is enough. todo: block on a reader wait queue.
-                    @import("../cpu.zig").halt();
+                    // Woken by whoever feeds the line discipline. An interrupted
+                    // wait gives back what was read so far, and the signal that
+                    // interrupted it is handled on the way out.
+                    self.read_queue.block(scheduler.get_current_task(), @ptrCast(self)) catch
+                        return count;
                 }
 
                 c.* = self.input_buffer[self.read_tail];
