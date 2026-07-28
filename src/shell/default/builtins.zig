@@ -3,6 +3,7 @@ const tty = @import("../../tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("../utils.zig");
 const CmdError = @import("../Shell.zig").CmdError;
+const SignalId = @import("../../task/signal.zig").Id;
 const colors = @import("colors");
 
 // TODO Replace printk with format(shell.writer, format, args)...
@@ -310,8 +311,10 @@ pub fn wait(shell: anytype, _: [][]u8) CmdError!void {
 pub fn kill(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) return CmdError.InvalidNumberOfArguments;
     const pid = std.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter;
-    const signal = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
-    @import("../../syscall/kill.zig").do(pid, @enumFromInt(signal)) catch return CmdError.InvalidParameter;
+    const number = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
+    // Typed at the prompt, so out of range is a typo rather than a signal.
+    const signal = std.meta.intToEnum(SignalId, number) catch return CmdError.InvalidParameter;
+    @import("../../syscall/kill.zig").do(pid, signal) catch return CmdError.InvalidParameter;
 }
 
 pub fn pstree(shell: anytype, _: [][]u8) CmdError!void {

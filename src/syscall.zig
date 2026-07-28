@@ -47,16 +47,19 @@ fn get_fn_proto_tuple(comptime proto: std.builtin.Type.Fn) type {
     } });
 }
 
-fn convert_param(comptime T: type, reg: usize) T {
+fn convert_param(comptime T: type, reg: usize) errno.Errno!T {
     if (@typeInfo(T) == .pointer or
         (@typeInfo(T) == .optional and @typeInfo(@typeInfo(T).optional.child) == .pointer))
     {
         return @ptrFromInt(reg);
     } else if (@typeInfo(T) == .@"enum") {
-        return @enumFromInt(@as(
+        // The register holds whatever userspace put there, so an enum parameter
+        // is a claim to check, not a value to trust: @enumFromInt on a number
+        // the enum does not cover is illegal behaviour.
+        return std.meta.intToEnum(T, @as(
             std.meta.Int(.unsigned, @bitSizeOf(T)),
             @truncate(reg),
-        ));
+        )) catch errno.Errno.EINVAL;
     } else {
         return @bitCast(@as(
             std.meta.Int(.unsigned, @bitSizeOf(T)),
@@ -86,7 +89,10 @@ fn SyscallType(sys_struct: type) enum { do, do_raw } {
     } else @compileError("Missing do or do_raw function for syscall");
 }
 
-fn get_params(comptime proto: std.builtin.Type.Fn, fr: interrupts.InterruptFrame) get_fn_proto_tuple(proto) {
+fn get_params(
+    comptime proto: std.builtin.Type.Fn,
+    fr: interrupts.InterruptFrame,
+) errno.Errno!get_fn_proto_tuple(proto) {
     if (proto.params.len > 6)
         @compileError("syscall cannot have more than 6 parameter");
 
@@ -95,7 +101,7 @@ fn get_params(comptime proto: std.builtin.Type.Fn, fr: interrupts.InterruptFrame
     const param_register = [_][]const u8{ "ebx", "ecx", "edx", "esi", "edi", "ebp" };
     inline for (0..tuple.len) |i| {
         const reg = @field(fr, param_register[i]);
-        tuple[i] = convert_param(@TypeOf(tuple[i]), reg);
+        tuple[i] = try convert_param(@TypeOf(tuple[i]), reg);
     }
     return tuple;
 }
@@ -111,10 +117,14 @@ fn call_syscall(comptime code: Code) void {
                 if (@typeInfo(return_type) == .error_union) return_type else errno.Errno!return_type
             else
                 errno.Errno!void;
-            const ret: ret_type = @call(.auto, sys_struct.do, get_params(
+            const params = get_params(
                 @typeInfo(@TypeOf(sys_struct.do)).@"fn",
                 current_task.ucontext.uc_mcontext,
-            ));
+            ) catch |e| {
+                current_task.ucontext.uc_mcontext.ebx = errno.error_num(e);
+                return;
+            };
+            const ret: ret_type = @call(.auto, sys_struct.do, params);
             if (ret) |v| {
                 current_task.ucontext.uc_mcontext.eax = if (comptime @TypeOf(v) != void)
                     convert_ret(@TypeOf(v), v)
