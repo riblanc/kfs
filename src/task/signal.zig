@@ -23,7 +23,13 @@ pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callco
 pub const SIG_DFL: Handler = @ptrFromInt(0);
 pub const SIG_IGN: Handler = @ptrFromInt(1);
 
-// ids according to the system V i386 ABI
+/// Numbers as abi-bits/signal.h assigns them, which is the set i386 Linux uses.
+/// POSIX names signals but does not number them, so the only requirement is
+/// that the libc and the kernel agree, and the libc headers come from mlibc.
+///
+/// These were the System V numbers before, which Solaris and Linux on MIPS
+/// still use. SIGEMT belongs to that set and has no number here; SIGSTKFLT
+/// takes the slot the System V table gave to SIGUSR1.
 pub const Id = enum(u32) {
     SIGHUP = 1,
     SIGINT = 2,
@@ -31,31 +37,34 @@ pub const Id = enum(u32) {
     SIGILL = 4,
     SIGTRAP = 5,
     SIGABRT = 6,
-    SIGEMT = 7,
+    SIGBUS = 7,
     SIGFPE = 8,
     SIGKILL = 9,
-    SIGBUS = 10,
+    SIGUSR1 = 10,
     SIGSEGV = 11,
-    SIGSYS = 12,
+    SIGUSR2 = 12,
     SIGPIPE = 13,
     SIGALRM = 14,
     SIGTERM = 15,
-    SIGUSR1 = 16,
-    SIGUSR2 = 17,
-    SIGCHLD = 18,
-    SIGPWR = 19,
-    SIGWINCH = 20,
-    SIGURG = 21,
-    SIGPOLL = 22,
-    SIGSTOP = 23,
-    SIGTSTP = 24,
-    SIGCONT = 25,
-    SIGTTIN = 26,
-    SIGTTOU = 27,
-    SIGVTALRM = 28,
-    SIGPROF = 29,
-    SIGXCPU = 30,
-    SIGXFSZ = 31,
+    SIGSTKFLT = 16,
+    SIGCHLD = 17,
+    SIGCONT = 18,
+    SIGSTOP = 19,
+    SIGTSTP = 20,
+    SIGTTIN = 21,
+    SIGTTOU = 22,
+    SIGURG = 23,
+    SIGXCPU = 24,
+    SIGXFSZ = 25,
+    SIGVTALRM = 26,
+    SIGPROF = 27,
+    SIGWINCH = 28,
+    SIGPOLL = 29,
+    SIGPWR = 30,
+    SIGSYS = 31,
+
+    /// The same signal under its other name.
+    pub const SIGIO = Id.SIGPOLL;
 };
 
 pub const Code = enum(u32) {
@@ -198,7 +207,6 @@ pub const SignalManager = struct {
             .SIGABRT,
             .SIGALRM,
             .SIGBUS,
-            .SIGEMT,
             .SIGFPE,
             .SIGHUP,
             .SIGILL,
@@ -210,6 +218,7 @@ pub const SignalManager = struct {
             .SIGPWR,
             .SIGQUIT,
             .SIGSEGV,
+            .SIGSTKFLT,
             .SIGSYS,
             .SIGTERM,
             .SIGTRAP,
