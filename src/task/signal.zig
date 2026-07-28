@@ -188,40 +188,55 @@ pub const SignalManager = struct {
     const non_maskable: SigSet = (@as(SigSet, 1) << @intFromEnum(Id.SIGKILL)) |
         (@as(SigSet, 1) << @intFromEnum(Id.SIGSTOP));
 
-    fn init_queue(self: *Self, id: Id, default_action: DefaultAction, ignorable: bool) void {
-        self.queues[@intFromEnum(id)] = SignalQueue.init(default_action, ignorable);
+    /// What a signal does with no handler installed. Exhaustive on purpose: a
+    /// new Id has to be given an action here before it compiles.
+    fn default_action(id: Id) DefaultAction {
+        return switch (id) {
+            .SIGCHLD, .SIGURG, .SIGWINCH => .Ignore,
+            .SIGCONT => .Continue,
+            .SIGSTOP, .SIGTSTP, .SIGTTIN, .SIGTTOU => .Stop,
+            .SIGABRT,
+            .SIGALRM,
+            .SIGBUS,
+            .SIGEMT,
+            .SIGFPE,
+            .SIGHUP,
+            .SIGILL,
+            .SIGINT,
+            .SIGKILL,
+            .SIGPIPE,
+            .SIGPOLL,
+            .SIGPROF,
+            .SIGPWR,
+            .SIGQUIT,
+            .SIGSEGV,
+            .SIGSYS,
+            .SIGTERM,
+            .SIGTRAP,
+            .SIGUSR1,
+            .SIGUSR2,
+            .SIGVTALRM,
+            .SIGXCPU,
+            .SIGXFSZ,
+            => .Terminate,
+        };
+    }
+
+    fn is_ignorable(id: Id) bool {
+        return switch (id) {
+            .SIGKILL, .SIGSTOP => false,
+            else => true,
+        };
     }
 
     pub fn init() Self {
-        var self = Self{};
-        self.init_queue(.SIGABRT, .Terminate, true);
-        self.init_queue(.SIGALRM, .Terminate, true);
-        self.init_queue(.SIGBUS, .Terminate, true);
-        self.init_queue(.SIGCHLD, .Ignore, true);
-        self.init_queue(.SIGCONT, .Continue, true);
-        self.init_queue(.SIGFPE, .Terminate, true);
-        self.init_queue(.SIGHUP, .Terminate, true);
-        self.init_queue(.SIGILL, .Terminate, true);
-        self.init_queue(.SIGINT, .Terminate, true);
-        self.init_queue(.SIGKILL, .Terminate, false);
-        self.init_queue(.SIGPIPE, .Terminate, true);
-        self.init_queue(.SIGQUIT, .Terminate, true);
-        self.init_queue(.SIGSEGV, .Terminate, true);
-        self.init_queue(.SIGSTOP, .Stop, false);
-        self.init_queue(.SIGTERM, .Terminate, true);
-        self.init_queue(.SIGTSTP, .Stop, true);
-        self.init_queue(.SIGTTIN, .Stop, true);
-        self.init_queue(.SIGTTOU, .Stop, true);
-        self.init_queue(.SIGUSR1, .Terminate, true);
-        self.init_queue(.SIGUSR2, .Terminate, true);
-        self.init_queue(.SIGPOLL, .Terminate, true);
-        self.init_queue(.SIGPROF, .Terminate, true);
-        self.init_queue(.SIGSYS, .Terminate, true);
-        self.init_queue(.SIGTRAP, .Terminate, true);
-        self.init_queue(.SIGURG, .Ignore, true);
-        self.init_queue(.SIGVTALRM, .Terminate, true);
-        self.init_queue(.SIGXCPU, .Terminate, true);
-        self.init_queue(.SIGXFSZ, .Terminate, true);
+        // Slot 0 is not a signal and is never indexed, but leaving it undefined
+        // is what let the missing entries above go unnoticed.
+        var self = Self{ .queues = @splat(SignalQueue.init(.Terminate, true)) };
+        inline for (@typeInfo(Id).@"enum".fields) |field| {
+            const id: Id = @enumFromInt(field.value);
+            self.queues[field.value] = SignalQueue.init(default_action(id), is_ignorable(id));
+        }
         return self;
     }
 
