@@ -159,26 +159,56 @@ pub const siginfo_t = extern struct {
     };
 };
 
+/// Only the 31 signals of Id are ever set, but sigset_t is 1024 bits wide in
+/// the ABI, so Sigaction carries the full width and the kernel works on the low
+/// word.
 pub const SigSet = u32;
+pub const AbiSigSet = [1024 / @bitSizeOf(SigSet)]SigSet;
 
+/// Bit positions are ABI: SA_SIGINFO is 0x4, SA_RESTART is 0x10000000. The gaps
+/// are the options this kernel does not implement.
+pub const Flags = packed struct(u32) {
+    SA_NOCLDSTOP: bool = false, // todo: implement this option
+    SA_NOCLDWAIT: bool = false, // todo: implement this option
+    SA_SIGINFO: bool = false,
+    _reserved_3_25: u23 = 0,
+    SA_RESTORER: bool = false, // the kernel provides its own, see _rfi_sigreturn
+    SA_ONSTACK: bool = false, // todo: implement this option
+    SA_RESTART: bool = false, // todo: implement this option
+    _reserved_29: u1 = 0,
+    SA_NODEFER: bool = false, // todo
+    SA_RESETHAND: bool = false, // todo: implement this option
+};
+
+/// Laid out as the ABI describes it, so a libc can pass its own struct through
+/// unchanged: the two handlers share a slot, and sa_restorer sits between the
+/// flags and the mask even though this kernel returns through its own stub.
+///
+/// extern rather than packed: every field is a multiple of four bytes, so the
+/// layout is the same either way, and a packed struct holding a function
+/// pointer defaulted to null crashes the compiler (zig 0.15.1).
 pub const Sigaction = extern struct {
-    sa_handler: Handler = SIG_DFL,
-    sa_sigaction: SigactionHandler = undefined,
-    sa_mask: SigSet = 0,
-    sa_flags: packed struct(u32) {
-        SA_NOCLDSTOP: bool = false, // todo: implement this option
-        // SA_ONSTACK, : bool = false,
-        SA_RESETHAND: bool = false, // todo: implement this option
-        SA_RESTART: bool = false, // todo: implement this option
-        SA_SIGINFO: bool = false,
-        // SA_NOCLDWAIT : bool = false,
-        SA_NODEFER: bool = false, // todo
-        // SS_ONSTACK : bool = false,
-        // SS_DISABLE : bool = false,
-        // MINSIGSTKSZ : bool = false,
-        // SIGSTKSZ : bool = false,
-        _unused: u27 = 0,
-    } = .{},
+    handler: extern union {
+        sa_handler: Handler,
+        sa_sigaction: SigactionHandler,
+    } = .{ .sa_handler = SIG_DFL },
+    sa_flags: Flags = .{},
+    sa_restorer: usize = 0,
+    sa_mask: AbiSigSet = [_]SigSet{0} ** @typeInfo(AbiSigSet).array.len,
+
+    /// The part of the mask this kernel acts on.
+    pub fn mask(self: Sigaction) SigSet {
+        return self.sa_mask[0];
+    }
+
+    // Userspace passes its own struct through, so the offsets are the contract.
+    comptime {
+        std.debug.assert(@offsetOf(Sigaction, "handler") == 0);
+        std.debug.assert(@offsetOf(Sigaction, "sa_flags") == 4);
+        std.debug.assert(@offsetOf(Sigaction, "sa_restorer") == 8);
+        std.debug.assert(@offsetOf(Sigaction, "sa_mask") == 12);
+        std.debug.assert(@sizeOf(Sigaction) == 140);
+    }
 };
 
 pub const SignalQueue = struct {
@@ -198,7 +228,7 @@ pub const SignalQueue = struct {
     pub fn init(default_handler: DefaultAction, ignorable: bool) Self {
         return Self{
             .default_handler = default_handler,
-            .action = .{ .sa_handler = SIG_DFL },
+            .action = .{ .handler = .{ .sa_handler = SIG_DFL } },
             .ignorable = ignorable,
         };
     }
@@ -216,8 +246,8 @@ pub const SignalQueue = struct {
 
     fn is_ignored(self: Self) bool {
         return !self.action.sa_flags.SA_SIGINFO and
-            (self.action.sa_handler == SIG_IGN or
-                (self.action.sa_handler == SIG_DFL and self.default_handler == .Ignore));
+            (self.action.handler.sa_handler == SIG_IGN or
+                (self.action.handler.sa_handler == SIG_DFL and self.default_handler == .Ignore));
     }
 
     pub fn queue_signal(self: *Self, signal: siginfo_t) void {

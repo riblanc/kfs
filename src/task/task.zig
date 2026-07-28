@@ -306,31 +306,30 @@ pub const TaskDescriptor = struct {
         // push ucontext on stack
         self.ucontext.uc_link = ucontext.put_on_stack(&self.ucontext, self.ucontext);
 
-        // put trampoline on stack
         // The handler returns into .userspace, which every address space maps,
         // so nothing has to be copied onto the user stack for it.
-        const bytecode_begin: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn" });
+        const trampoline: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn" });
 
         if (!action.sa_flags.SA_NODEFER) {
             self.ucontext.uc_sigmask |=
                 @as(signal.SigSet, 1) << @as(u5, @intCast(@intFromEnum(info.si_signo.unwrap())));
         }
 
-        self.ucontext.uc_sigmask |= action.sa_mask;
+        self.ucontext.uc_sigmask |= action.mask();
 
         if (action.sa_flags.SA_SIGINFO) {
             const siginfo_address = ucontext.put_on_stack(&self.ucontext, info);
             ucontext.makecontext(
                 &self.ucontext,
-                @intFromPtr(bytecode_begin),
-                @intFromPtr(action.sa_sigaction),
+                @intFromPtr(trampoline),
+                @intFromPtr(action.handler.sa_sigaction),
                 .{ info.si_signo, siginfo_address, self.ucontext.uc_link },
             );
         } else {
             ucontext.makecontext(
                 &self.ucontext,
-                @intFromPtr(bytecode_begin),
-                @intFromPtr(action.sa_handler),
+                @intFromPtr(trampoline),
+                @intFromPtr(action.handler.sa_handler),
                 .{info.si_signo},
             );
         }
@@ -339,9 +338,9 @@ pub const TaskDescriptor = struct {
     pub fn do_action(self: *Self, action: signal.Sigaction, info: signal.siginfo_t) void {
         if (action.sa_flags.SA_SIGINFO) {
             self.add_signal_frame(action, info);
-        } else if (action.sa_handler == signal.SIG_DFL) {
+        } else if (action.handler.sa_handler == signal.SIG_DFL) {
             self.handle_default_action(info);
-        } else if (action.sa_handler != signal.SIG_IGN) {
+        } else if (action.handler.sa_handler != signal.SIG_IGN) {
             self.add_signal_frame(action, info);
         }
     }
