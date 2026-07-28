@@ -307,14 +307,9 @@ pub const TaskDescriptor = struct {
         self.ucontext.uc_link = ucontext.put_on_stack(&self.ucontext, self.ucontext);
 
         // put trampoline on stack
-        const rfi_sigreturn: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn" });
-        const rfi_sigreturn_end: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn_end" });
-
-        const bytecode = rfi_sigreturn[0 .. @as(usize, @intFromPtr(rfi_sigreturn_end)) - @as(
-            usize,
-            @intFromPtr(rfi_sigreturn),
-        )];
-        const bytecode_begin = ucontext.put_data_on_stack(&self.ucontext, bytecode).ptr;
+        // The handler returns into .userspace, which every address space maps,
+        // so nothing has to be copied onto the user stack for it.
+        const bytecode_begin: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn" });
 
         if (!action.sa_flags.SA_NODEFER) {
             self.ucontext.uc_sigmask |=

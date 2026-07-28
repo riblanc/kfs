@@ -242,12 +242,17 @@ pub fn unset_gate(id: u8) void {
 
 pub const Stub = *const fn () callconv(.naked) void;
 
+// Return path out of a signal handler. It lives in .userspace, which every
+// address space maps, so a handler can return straight into it instead of into
+// a copy on its own stack.
 comptime {
     asm (std.fmt.comptimePrint(
+            \\ .pushsection .userspace,"ax"
             \\ _rfi_sigreturn:
             \\ mov ${}, %eax
             \\ int $0x80
             \\ _rfi_sigreturn_end:
+            \\ .popsection
         , .{@import("syscall/sigreturn.zig").Id}));
 }
 
