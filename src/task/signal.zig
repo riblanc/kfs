@@ -23,7 +23,13 @@ pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callco
 pub const SIG_DFL: Handler = @ptrFromInt(0);
 pub const SIG_IGN: Handler = @ptrFromInt(1);
 
-// ids according to the system V i386 ABI
+/// Numbers as abi-bits/signal.h assigns them, which is the set i386 Linux uses.
+/// POSIX names signals but does not number them, so the only requirement is
+/// that the libc and the kernel agree, and the libc headers come from mlibc.
+///
+/// These were the System V numbers before, which Solaris and Linux on MIPS
+/// still use. SIGEMT belongs to that set and has no number here; SIGSTKFLT
+/// takes the slot the System V table gave to SIGUSR1.
 pub const Id = enum(u32) {
     SIGHUP = 1,
     SIGINT = 2,
@@ -31,31 +37,34 @@ pub const Id = enum(u32) {
     SIGILL = 4,
     SIGTRAP = 5,
     SIGABRT = 6,
-    SIGEMT = 7,
+    SIGBUS = 7,
     SIGFPE = 8,
     SIGKILL = 9,
-    SIGBUS = 10,
+    SIGUSR1 = 10,
     SIGSEGV = 11,
-    SIGSYS = 12,
+    SIGUSR2 = 12,
     SIGPIPE = 13,
     SIGALRM = 14,
     SIGTERM = 15,
-    SIGUSR1 = 16,
-    SIGUSR2 = 17,
-    SIGCHLD = 18,
-    SIGPWR = 19,
-    SIGWINCH = 20,
-    SIGURG = 21,
-    SIGPOLL = 22,
-    SIGSTOP = 23,
-    SIGTSTP = 24,
-    SIGCONT = 25,
-    SIGTTIN = 26,
-    SIGTTOU = 27,
-    SIGVTALRM = 28,
-    SIGPROF = 29,
-    SIGXCPU = 30,
-    SIGXFSZ = 31,
+    SIGSTKFLT = 16,
+    SIGCHLD = 17,
+    SIGCONT = 18,
+    SIGSTOP = 19,
+    SIGTSTP = 20,
+    SIGTTIN = 21,
+    SIGTTOU = 22,
+    SIGURG = 23,
+    SIGXCPU = 24,
+    SIGXFSZ = 25,
+    SIGVTALRM = 26,
+    SIGPROF = 27,
+    SIGWINCH = 28,
+    SIGPOLL = 29,
+    SIGPWR = 30,
+    SIGSYS = 31,
+
+    /// The same signal under its other name.
+    pub const SIGIO = Id.SIGPOLL;
 };
 
 // si_code is read relative to si_signo: 1 means SEGV_MAPERR under SIGSEGV and
@@ -289,40 +298,55 @@ pub const SignalManager = struct {
     const non_maskable: SigSet = (@as(SigSet, 1) << @intFromEnum(Id.SIGKILL)) |
         (@as(SigSet, 1) << @intFromEnum(Id.SIGSTOP));
 
-    fn init_queue(self: *Self, id: Id, default_action: DefaultAction, ignorable: bool) void {
-        self.queues[@intFromEnum(id)] = SignalQueue.init(default_action, ignorable);
+    /// What a signal does with no handler installed. Exhaustive on purpose: a
+    /// new Id has to be given an action here before it compiles.
+    fn default_action(id: Id) DefaultAction {
+        return switch (id) {
+            .SIGCHLD, .SIGURG, .SIGWINCH => .Ignore,
+            .SIGCONT => .Continue,
+            .SIGSTOP, .SIGTSTP, .SIGTTIN, .SIGTTOU => .Stop,
+            .SIGABRT,
+            .SIGALRM,
+            .SIGBUS,
+            .SIGFPE,
+            .SIGHUP,
+            .SIGILL,
+            .SIGINT,
+            .SIGKILL,
+            .SIGPIPE,
+            .SIGPOLL,
+            .SIGPROF,
+            .SIGPWR,
+            .SIGQUIT,
+            .SIGSEGV,
+            .SIGSTKFLT,
+            .SIGSYS,
+            .SIGTERM,
+            .SIGTRAP,
+            .SIGUSR1,
+            .SIGUSR2,
+            .SIGVTALRM,
+            .SIGXCPU,
+            .SIGXFSZ,
+            => .Terminate,
+        };
+    }
+
+    fn is_ignorable(id: Id) bool {
+        return switch (id) {
+            .SIGKILL, .SIGSTOP => false,
+            else => true,
+        };
     }
 
     pub fn init() Self {
-        var self = Self{};
-        self.init_queue(.SIGABRT, .Terminate, true);
-        self.init_queue(.SIGALRM, .Terminate, true);
-        self.init_queue(.SIGBUS, .Terminate, true);
-        self.init_queue(.SIGCHLD, .Ignore, true);
-        self.init_queue(.SIGCONT, .Continue, true);
-        self.init_queue(.SIGFPE, .Terminate, true);
-        self.init_queue(.SIGHUP, .Terminate, true);
-        self.init_queue(.SIGILL, .Terminate, true);
-        self.init_queue(.SIGINT, .Terminate, true);
-        self.init_queue(.SIGKILL, .Terminate, false);
-        self.init_queue(.SIGPIPE, .Terminate, true);
-        self.init_queue(.SIGQUIT, .Terminate, true);
-        self.init_queue(.SIGSEGV, .Terminate, true);
-        self.init_queue(.SIGSTOP, .Stop, false);
-        self.init_queue(.SIGTERM, .Terminate, true);
-        self.init_queue(.SIGTSTP, .Stop, true);
-        self.init_queue(.SIGTTIN, .Stop, true);
-        self.init_queue(.SIGTTOU, .Stop, true);
-        self.init_queue(.SIGUSR1, .Terminate, true);
-        self.init_queue(.SIGUSR2, .Terminate, true);
-        self.init_queue(.SIGPOLL, .Terminate, true);
-        self.init_queue(.SIGPROF, .Terminate, true);
-        self.init_queue(.SIGSYS, .Terminate, true);
-        self.init_queue(.SIGTRAP, .Terminate, true);
-        self.init_queue(.SIGURG, .Ignore, true);
-        self.init_queue(.SIGVTALRM, .Terminate, true);
-        self.init_queue(.SIGXCPU, .Terminate, true);
-        self.init_queue(.SIGXFSZ, .Terminate, true);
+        // Slot 0 is not a signal and is never indexed, but leaving it undefined
+        // is what let the missing entries above go unnoticed.
+        var self = Self{ .queues = @splat(SignalQueue.init(.Terminate, true)) };
+        inline for (@typeInfo(Id).@"enum".fields) |field| {
+            const id: Id = @enumFromInt(field.value);
+            self.queues[field.value] = SignalQueue.init(default_action(id), is_ignorable(id));
+        }
         return self;
     }
 
