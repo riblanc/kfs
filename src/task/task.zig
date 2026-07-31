@@ -138,12 +138,24 @@ pub const TaskDescriptor = struct {
         return @intFromPtr(page) == base;
     }
 
+    pub fn close_files(self: *Self) void {
+        for (self.files[0..]) |*opt_file| {
+            if (opt_file.*) |file| {
+                file.close() catch {};
+                opt_file.* = null;
+            }
+        }
+    }
+
     /// Terminate this task: mark as Zombie, notify parent, and fire on_terminate callbacks.
     /// The caller is responsible for calling scheduler.schedule() afterwards if needed.
     pub fn terminate(self: *Self, status: @import("status_informations.zig").Status) void {
         if (self.state == .Ready)
             ready_queue.remove(self);
         self.state = .Zombie;
+        // A reader at the other end of a pipe only reaches the end of it once
+        // every writer has closed, and a zombie can go unreaped for a while.
+        self.close_files();
         self.update_status(status);
         for (on_terminate_callback.items) |callback|
             callback(self);
@@ -182,12 +194,7 @@ pub const TaskDescriptor = struct {
             }
         }
 
-        for (self.files[0..]) |*opt_file| {
-            if (opt_file.*) |file| {
-                file.close() catch {};
-                opt_file.* = null;
-            }
-        }
+        self.close_files();
 
         self.deinit_vm();
 
