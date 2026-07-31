@@ -389,6 +389,7 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
             var req = poc.DemoRequest{
                 .entry = @intFromPtr(@extern(?*fn () void, .{ .name = "userland_" ++ name }).?),
                 .argv = args[1..],
+                .envp = &.{"PATH=/bin"},
             };
             const new_task = @import("../../task/task_set.zig").create_task() catch
                 @panic("Failed to create new_task");

@@ -70,6 +70,26 @@ $(USERLAND_BIN)/%: $(USERLAND_OBJ)/%.o $(LIBC_ARCHIVE)
 # them after linking.
 .PRECIOUS: $(USERLAND_OBJ)/%.o
 
+# A whole program rather than one file, so it gets its own rule. The readline
+# directory holds a stand-in for the library shadokos does not have, and comes
+# first on the include path so the shell's sources compile untouched.
+MINISHELL_DIR = $(USERLAND)/minishell
+MINISHELL_SRC = $(shell find $(MINISHELL_DIR) -name '*.c' 2>/dev/null)
+MINISHELL_ELF = $(USERLAND_BIN)/minishell
+
+# Installed alongside the one file programs.
+USERLAND_ELF += $(MINISHELL_ELF)
+
+$(MINISHELL_ELF): $(MINISHELL_SRC) $(LIBC_ARCHIVE) | libc
+	mkdir -p $(USERLAND_BIN)
+	PATH="$(MLIBC_PATH)" i686-shadokos-cc -nostdlib \
+		-I $(MINISHELL_DIR) -I $(MINISHELL_DIR)/includes \
+		$(LIBC_INCLUDE) \
+		$(SYSROOT)/usr/lib/crt1.o \
+		$(MINISHELL_SRC) \
+		$(SYSROOT)/usr/lib/libc.a \
+		-o $@
+
 .PHONY: userland
 userland: $(USERLAND_ELF)
 
@@ -96,15 +116,16 @@ $(FS_IMAGE):
 .PHONY: fs-layout
 fs-layout: $(FS_IMAGE)
 	@debugfs -w -R "mkdir /dev" $(FS_IMAGE) >/dev/null 2>&1 || true
+	@debugfs -w -R "mkdir /bin" $(FS_IMAGE) >/dev/null 2>&1 || true
 
-# Every binary lands at the root of the image. A stripped copy is written: the
+# Every binary lands in /bin on the image. A stripped copy is written: the
 # debug info would multiply the number of blocks exec() has to read.
 .PHONY: userland-install
 userland-install: userland $(FS_IMAGE) fs-layout
 	@for elf in $(USERLAND_ELF); do \
 		name=$$(basename $$elf); \
 		strip -o $(USERLAND_BIN)/.$$name.stripped $$elf; \
-		debugfs -w -R "rm /$$name" $(FS_IMAGE) >/dev/null 2>&1 || true; \
-		debugfs -w -R "write $(USERLAND_BIN)/.$$name.stripped $$name" $(FS_IMAGE); \
+		debugfs -w -R "rm /bin/$$name" $(FS_IMAGE) >/dev/null 2>&1 || true; \
+		debugfs -w -R "write $(USERLAND_BIN)/.$$name.stripped /bin/$$name" $(FS_IMAGE); \
 		rm -f $(USERLAND_BIN)/.$$name.stripped; \
 	done

@@ -15,6 +15,7 @@ const regions = @import("memory/regions.zig");
 pub const DemoRequest = struct {
     entry: usize,
     argv: []const []const u8,
+    envp: []const []const u8,
 };
 
 /// Spawn trampoline for the demos. The Image is synthetic: there is no program header
@@ -29,17 +30,19 @@ pub fn enter_demo(data: usize) u8 {
     userspace.map_userspace(vm);
 
     const argv = TaskDescriptor.dupe_strings_z(req.argv) catch @panic("todo Failed to copy argv");
+    const envp = TaskDescriptor.dupe_strings_z(req.envp) catch @panic("todo Failed to copy argv");
 
     const entry = userspace.prepare_entry(vm, .{
         .entry = req.entry,
         .phdr_vaddr = 0,
         .phentsize = 0,
         .phnum = 0,
-    }, argv, &.{});
+    }, argv, envp);
 
     // prepare_entry copied the strings onto the user stack, and iret_to is noreturn,
     // so release here: a defer would never run.
     TaskDescriptor.free_strings_z(argv);
+    TaskDescriptor.free_strings_z(envp);
     userspace.iret_to(entry);
 }
 
