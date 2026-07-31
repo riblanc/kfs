@@ -42,6 +42,10 @@ foreground_pgid: ?Pid = null,
 /// Readers waiting for the line discipline to publish something.
 read_queue: wait_queue.WaitQueue(.{ .predicate = input_ready }) = .{},
 
+/// One reader at a time consumes the input buffer, or two tasks reading the
+/// same terminal take the same byte and step read_tail twice.
+read_lock: @import("../../task/semaphore.zig").Mutex = .{},
+
 /// Set when the VTIME timer fires, cleared when a read starts.
 read_timed_out: bool = false,
 
@@ -300,6 +304,9 @@ pub fn read(self: *Self, s: []u8) ReadError!usize {
     const inter_byte = self.config.c_cc[@intFromEnum(termios.cc_index.VMIN)] != 0;
     var count: usize = 0;
 
+    self.read_lock.acquire();
+    defer self.read_lock.release();
+
     self.read_timed_out = false;
     // With VMIN 0 the timer bounds the whole read. Above 0 it measures the gap
     // between bytes, so it only starts once one has arrived.
@@ -312,7 +319,15 @@ pub fn read(self: *Self, s: []u8) ReadError!usize {
             // Woken by whoever feeds the line discipline. An interrupted wait
             // gives back what was read so far, and the signal that interrupted
             // it is handled on the way out.
-            self.read_queue.block(scheduler.get_current_task(), @ptrCast(self)) catch
+            // Dropped while asleep, or a reader waiting on the terminal would
+            // hold it against the one about to feed it.
+            self.read_lock.release();
+            const interrupted = if (self.read_queue.block(scheduler.get_current_task(), @ptrCast(self)))
+                false
+            else |_|
+                true;
+            self.read_lock.acquire();
+            if (interrupted)
                 return count;
         }
 
