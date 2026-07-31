@@ -30,6 +30,8 @@ pub const Error = struct {
         ENXIO,
         /// A read that waits can be cut short by a signal.
         EINTR,
+        /// One end of a pipe only answers in one direction.
+        EBADF,
     };
     pub const write = error{
         EBUSY,
@@ -38,6 +40,10 @@ pub const Error = struct {
         ENOMEM,
         EPERM,
         ENOSPC,
+        EINTR,
+        EBADF,
+        // Nothing holds the far end of the pipe open any more.
+        EPIPE,
     };
     pub const readdir = error{
         EBUSY,
@@ -49,6 +55,8 @@ pub const Error = struct {
     pub const seek = error{
         EOVERFLOW,
         EINVAL,
+        /// Pipes and terminals have no position to move.
+        ESPIPE,
     };
 };
 

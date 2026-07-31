@@ -136,6 +136,7 @@ pub fn init() !void {
     try add_filesystem(@import("devfs.zig").fs);
 
     try @import("file.zig").init_cache();
+    @import("pipe.zig").init();
 
     try mount(&root_dentry, @import("../command_line.zig").get().root, .{});
 
