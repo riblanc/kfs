@@ -90,21 +90,26 @@ pub fn do(path: [*:0]const u8, flags: Flags, mode: Mode) Errno!TaskDescriptor.Fd
     const tnode = if (flags.create) try create_file(std.mem.span(path), flags, mode) else try vfs.resolve(std.mem.span(path));
     defer tnode.release();
     const inode = tnode.inode;
-    if (flags.truncate) {
+    // POSIX has O_TRUNC ignored on a terminal or a fifo rather than refused,
+    // and neither has a length to cut back.
+    if (flags.truncate and inode.mode.type == .Regular) {
         try inode.truncate(0);
     }
-    if (flags.append or
-        flags.close_on_exec or
+    if (flags.directory and inode.mode.type != .Directory)
+        return Errno.ENOTDIR;
+    // These flags come straight from userspace, so an unsupported one is an
+    // answer to give back rather than a reason to stop the kernel.
+    if (flags.close_on_exec or
         flags.close_on_fork or
-        flags.directory or
         flags.no_controlling_tty or
         flags.no_follow or
         flags.non_blocking or
         flags.tty_init)
     {
-        @panic("not implemented");
+        return Errno.ENOSYS;
     }
     const file = try tnode.inode.open();
     errdefer file.close() catch {};
+    file.options.append = flags.append;
     return scheduler.get_current_task().add_file(file) orelse return Errno.EMFILE;
 }

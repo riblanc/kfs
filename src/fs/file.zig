@@ -8,6 +8,7 @@ const memory = @import("../memory.zig");
 inode: *Inode,
 refs: usize = 0,
 pos: u64 = 0,
+options: Options = .{},
 vtable: *const VTable = &default_vtable,
 
 pub const Options = struct {
@@ -123,6 +124,10 @@ pub const Generic = struct {
     }
 
     pub fn write(self: *Self, buffer: []const u8) Error.write!usize {
+        // O_APPEND is per write, not just where the file was opened: another
+        // writer may have grown it since.
+        if (self.options.append)
+            self.pos = self.inode.size;
         const written = try self.inode.pwrite(self.pos, buffer);
         self.pos += written;
         return written;
