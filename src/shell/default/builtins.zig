@@ -395,6 +395,10 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
             // Own process group, so the terminal can signal the routine without
             // hitting the shell that is waiting for it.
             new_task.pgid = new_task.pid;
+            new_task.open_std_streams() catch |e| {
+                utils.print_error(shell, "cannot open the standard streams: {s}", .{@errorName(e)});
+                return CmdError.OtherError;
+            };
             new_task.spawn(&poc.enter_demo, @intFromPtr(&req)) catch
                 @panic("Failed to spawn new_task");
             utils.waitpid(shell, new_task.pid);

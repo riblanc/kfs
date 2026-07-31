@@ -438,6 +438,28 @@ pub const TaskDescriptor = struct {
         return self.files[@intCast(fd)];
     }
 
+    /// Point the three standard descriptors at this task's terminal, through
+    /// its node under /dev, so they are ordinary open files rather than numbers
+    /// the read and write syscalls have to recognise.
+    pub fn open_std_streams(self: *Self) !void {
+        const tty_mod = @import("../device/tty/tty.zig");
+
+        const terminal = self.controlling_tty orelse return;
+        var name_buffer: [16]u8 = undefined;
+        var path_buffer: [24]u8 = undefined;
+        const name = try tty_mod.device_name(terminal, &name_buffer);
+        // Relative to the root: this runs before the task has one of its own.
+        const path = try std.fmt.bufPrint(&path_buffer, "dev/{s}", .{name});
+
+        const tnode = try vfs.resolve_at(&vfs.root_dentry, path);
+        defer tnode.release();
+        // One open shared by the three, the way a shell hands its terminal down.
+        const file = try tnode.inode.open();
+        self.files[0] = file;
+        self.files[1] = file.get_ref();
+        self.files[2] = file.get_ref();
+    }
+
     /// The child shares the parent's open files rather than reopening them, so
     /// a read in either one advances the position both of them see.
     pub fn clone_files(self: *Self, parent: *Self) void {
@@ -447,8 +469,7 @@ pub const TaskDescriptor = struct {
     }
 
     pub fn add_file(self: *Self, file: *File) ?Fd {
-        // todo: remove minimum 3 when we have tty char devices
-        for (self.files[3..], 3..) |*f, fd| {
+        for (self.files[0..], 0..) |*f, fd| {
             if (f.* == null) {
                 f.* = file;
                 return @intCast(fd);

@@ -73,14 +73,6 @@ pub fn set_tty(n: u8) !void {
     tty_array[current_tty].driver_flush();
 }
 
-pub inline fn get_reader() std.io.AnyReader {
-    return tty_array[current_tty].reader().any();
-}
-
-pub inline fn get_writer() std.io.AnyWriter {
-    return tty_array[current_tty].writer().any();
-}
-
 pub const width = 80;
 pub const height = 25;
 
@@ -110,6 +102,16 @@ pub fn set_console(t: *TtyStruct) void {
 
 pub fn index_of(t: *const TtyStruct) usize {
     return (@intFromPtr(t) - @intFromPtr(&tty_array[0])) / @sizeOf(TtyStruct);
+}
+
+/// The name this terminal answers to in the char device registry, and so the
+/// one it has under /dev.
+pub fn device_name(t: *const TtyStruct, buffer: []u8) ![]const u8 {
+    const index = index_of(t);
+    return if (index < num_consoles)
+        std.fmt.bufPrint(buffer, "tty{d}", .{index})
+    else
+        std.fmt.bufPrint(buffer, "ttyS{d}", .{index - num_consoles});
 }
 
 /// The terminal the running task talks to, or the console when it has none.
