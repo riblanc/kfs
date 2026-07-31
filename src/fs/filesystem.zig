@@ -4,7 +4,8 @@ const SuperBlock = @import("superblock.zig");
 
 identify: *const fn (*block.Partition) bool = &Generic.identify,
 uuid: *const fn (*block.Partition) ?SuperBlock.UUID = &Generic.uuid,
-create: *const fn (*block.Partition, std.mem.Allocator) *SuperBlock,
+/// Receives null when the filesystem is mounted without a medium.
+create: *const fn (?*block.Partition, std.mem.Allocator) *SuperBlock,
 name: []const u8,
 
 const Generic = struct {

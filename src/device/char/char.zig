@@ -12,6 +12,9 @@ pub const CharError = error{
     NotSupported,
     PermissionDenied,
     OutOfMemory,
+    /// A signal arrived before anything could be read. Distinct from reading
+    /// nothing, which means the end of the stream.
+    Interrupted,
 };
 
 /// VTable for character device drivers.

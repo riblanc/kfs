@@ -28,6 +28,8 @@ pub const Error = struct {
         ENOMEM,
         EPERM,
         ENXIO,
+        /// A read that waits can be cut short by a signal.
+        EINTR,
     };
     pub const write = error{
         EBUSY,

@@ -25,7 +25,9 @@ const SERIAL_MINOR_BASE: types.minor_t = 64;
 var tty_current_cdev: CharDevice = undefined;
 
 fn tty_current_read(_: *CharDevice, buffer: []u8) CharError!usize {
-    return tty_mod.get_tty().read(buffer) catch return CharError.IOError;
+    return tty_mod.get_tty().read(buffer) catch |e| switch (e) {
+        error.EINTR => CharError.Interrupted,
+    };
 }
 
 fn tty_current_write(_: *CharDevice, data: []const u8) CharError!usize {
@@ -43,7 +45,9 @@ var tty_cdevs: [tty_mod.num_consoles]CharDevice = undefined;
 
 fn tty_read(dev: *CharDevice, buffer: []u8) CharError!usize {
     const tty_s = &tty_mod.tty_array[dev.devt.minor];
-    return tty_s.read(buffer) catch return CharError.IOError;
+    return tty_s.read(buffer) catch |e| switch (e) {
+        error.EINTR => CharError.Interrupted,
+    };
 }
 
 fn tty_write(dev: *CharDevice, data: []const u8) CharError!usize {
@@ -65,7 +69,9 @@ var serial_count: usize = 0;
 fn serial_read(dev: *CharDevice, buffer: []u8) CharError!usize {
     const idx = dev.devt.minor - SERIAL_MINOR_BASE;
     const tty_s = &tty_mod.tty_array[tty_mod.num_consoles + idx];
-    return tty_s.read(buffer) catch return CharError.IOError;
+    return tty_s.read(buffer) catch |e| switch (e) {
+        error.EINTR => CharError.Interrupted,
+    };
 }
 
 fn serial_write(dev: *CharDevice, data: []const u8) CharError!usize {

@@ -175,7 +175,7 @@ pub fn flush(self: *Self) WriteError!void {
 }
 
 pub fn write_block(self: *Self, block: usize, buffer: []const u8) WriteError!void {
-    return self.vfs.partition.write(
+    return self.vfs.partition.?.write(
         block * (self.vfs.block_size / blk.STANDARD_BLOCK_SIZE),
         self.vfs.block_size / blk.STANDARD_BLOCK_SIZE,
         buffer[0..],
@@ -216,7 +216,7 @@ pub fn write_something(self: *Self, data: anytype, block: usize, offset: usize) 
 }
 
 pub fn read_block(self: *Self, block: usize, buffer: []u8) ReadError!void {
-    return self.vfs.partition.read(
+    return self.vfs.partition.?.read(
         block * (self.vfs.block_size / blk.STANDARD_BLOCK_SIZE),
         self.vfs.block_size / blk.STANDARD_BLOCK_SIZE,
         buffer[0..],

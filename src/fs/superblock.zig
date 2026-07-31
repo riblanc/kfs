@@ -17,7 +17,8 @@ max_name: usize,
 
 uuid: ?UUID,
 
-partition: *Partition,
+/// Null for a filesystem with no medium behind it, like devfs.
+partition: ?*Partition,
 vtable: *const VTable,
 cache: InodeCache,
 

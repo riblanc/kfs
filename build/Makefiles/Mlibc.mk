@@ -73,10 +73,16 @@ $(FS_IMAGE):
 	truncate -s $(FS_SIZE) $@
 	mke2fs -q -t ext2 -U $(FS_UUID) $@
 
+# devfs is mounted here at boot. It only has to exist; whatever is inside is
+# hidden by the mount.
+.PHONY: fs-layout
+fs-layout: $(FS_IMAGE)
+	@debugfs -w -R "mkdir /dev" $(FS_IMAGE) >/dev/null 2>&1 || true
+
 # Every binary lands at the root of the image. A stripped copy is written: the
 # debug info would multiply the number of blocks exec() has to read.
 .PHONY: userland-install
-userland-install: userland $(FS_IMAGE)
+userland-install: userland $(FS_IMAGE) fs-layout
 	@for elf in $(USERLAND_ELF); do \
 		name=$$(basename $$elf); \
 		strip -o $(USERLAND_BIN)/.$$name.stripped $$elf; \

@@ -157,7 +157,9 @@ pub fn Shell(comptime _builtins: anytype) type {
             // Read a line from the TTY
             const the_reader = self.reader();
             const slice = the_reader.readUntilDelimiterAlloc(allocator, '\n', max_line_size) catch |e| {
-                if (e == error.EndOfStream) return;
+                // A signal abandons the line being typed, and the caller comes
+                // straight back with a fresh prompt.
+                if (e == error.EndOfStream or e == error.EINTR) return;
                 self.execution_context.err = e;
                 if (self.hooks.on_error) |hook| hook(self);
                 return;

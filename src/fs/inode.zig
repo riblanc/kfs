@@ -95,6 +95,8 @@ pub const Error = struct {
         ENOMEM,
         EPERM,
         ENXIO,
+        /// A device read can be cut short by a signal.
+        EINTR,
     };
     pub const pwrite = error{
         EBUSY,

@@ -121,15 +121,32 @@ pub fn mount(dst: *Tnode, identifier: PartIdentifier, options: MountOptions) !vo
     std.log.debug("salut", .{});
 }
 
+/// Mount a filesystem that has no medium behind it, so no partition to find.
+pub fn mount_pseudo(dst: *Tnode, fs_name: []const u8) !void {
+    const fs = get_fs_by_name(fs_name) orelse return Errno.ENODEV;
+    const superblock = fs.create(null, memory.smallAlloc.allocator());
+    dst.mount(try superblock.get_root());
+}
+
 pub fn init() !void {
     Tnode.init_cache() catch @panic("todo");
 
     @import("ext2/driver.zig").static_init() catch @panic("todo");
     try add_filesystem(@import("ext2/driver.zig").fs);
+    try add_filesystem(@import("devfs.zig").fs);
 
     try @import("file.zig").init_cache();
 
     try mount(&root_dentry, @import("../command_line.zig").get().root, .{});
+
+    // Relative to the root just mounted: an absolute path goes through the
+    // current task, which has no root of its own this early.
+    if (resolve_at(&root_dentry, "dev")) |dev| {
+        mount_pseudo(dev, "devfs") catch |e|
+            std.log.warn("could not mount devfs: {s}", .{@errorName(e)});
+    } else |_| {
+        std.log.warn("no /dev on the root filesystem, devfs not mounted", .{});
+    }
 }
 
 fn resolve_max_symlink(cwd: *Tnode, path: []const u8, max_symlink: usize) !*Tnode {

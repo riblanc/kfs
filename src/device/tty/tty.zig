@@ -108,7 +108,7 @@ pub fn set_console(t: *TtyStruct) void {
     console = t;
 }
 
-fn index_of(t: *const TtyStruct) usize {
+pub fn index_of(t: *const TtyStruct) usize {
     return (@intFromPtr(t) - @intFromPtr(&tty_array[0])) / @sizeOf(TtyStruct);
 }
 

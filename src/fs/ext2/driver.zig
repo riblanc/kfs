@@ -29,10 +29,10 @@ pub fn uuid(part: *Partition) ?u128 {
     return if (superblock.version_major == 1) @byteSwap(superblock.extended.uuid) else null;
 }
 
-pub fn create(part: *Partition, allocator: std.mem.Allocator) *SuperBlock {
+pub fn create(part: ?*Partition, allocator: std.mem.Allocator) *SuperBlock {
     std.log.debug("Ext2Superblock alignment: {}", .{@alignOf(Ext2Superblock)});
     const driver_sb: *Ext2Superblock = allocator.create(Ext2Superblock) catch @panic("todo");
-    driver_sb.* = Ext2Superblock.init(part, allocator, false) catch @panic("todo");
+    driver_sb.* = Ext2Superblock.init(part.?, allocator, false) catch @panic("todo");
     return driver_sb.ToVfs();
 }
 

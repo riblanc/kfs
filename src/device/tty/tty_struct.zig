@@ -241,7 +241,9 @@ pub fn output_processing(self: *Self, c: u8) void {
 }
 
 pub const WriteError = error{};
-pub const ReadError = error{};
+/// A read interrupted before it had anything to give back says so, since
+/// returning zero is how the end of the stream is reported.
+pub const ReadError = error{EINTR};
 
 pub const Writer = std.io.GenericWriter(*Self, WriteError, write);
 pub const Reader = std.io.GenericReader(*Self, ReadError, read);
@@ -328,7 +330,7 @@ pub fn read(self: *Self, s: []u8) ReadError!usize {
                 true;
             self.read_lock.acquire();
             if (interrupted)
-                return count;
+                return if (count != 0) count else error.EINTR;
         }
 
         c.* = self.input_buffer[self.read_tail];
@@ -395,6 +397,12 @@ pub fn set_termios(self: *Self, new: termios.termios) void {
     if (self.driver.set_termios) |set_fn| {
         set_fn(self, old);
     }
+}
+
+/// Whether a hardware driver has taken this slot over. A serial slot with no
+/// port behind it keeps the no-op backend, and writing there goes nowhere.
+pub fn attached(self: *const Self) bool {
+    return self.driver != &noop_driver;
 }
 
 // No-op default driver

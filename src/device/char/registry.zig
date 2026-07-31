@@ -74,6 +74,19 @@ pub fn get_device(devt: dev_t) ?*CharDevice {
     return null;
 }
 
+/// Walk the registered devices, ordered by dev_t.
+pub fn iterator() Treap.InorderIterator {
+    return devices.inorderIterator();
+}
+
+/// How many devices are registered.
+pub fn count() usize {
+    var total: usize = 0;
+    var it = devices.inorderIterator();
+    while (it.next()) |_| total += 1;
+    return total;
+}
+
 /// Lookup a character device by name.
 pub fn get_device_by_name(name: []const u8) ?*CharDevice {
     var it = devices.inorderIterator();
