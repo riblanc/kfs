@@ -38,17 +38,27 @@ USERLAND = $(CURDIR)/userland
 USERLAND_OBJ = $(USERLAND)/.objs
 USERLAND_BIN = $(USERLAND)/build
 USERLAND_SRC = $(wildcard $(USERLAND)/*.c)
-USERLAND_ELF = $(patsubst $(USERLAND)/%.c,$(USERLAND_BIN)/%.elf,$(USERLAND_SRC))
+USERLAND_ELF = $(patsubst $(USERLAND)/%.c,$(USERLAND_BIN)/%,$(USERLAND_SRC))
 
-$(USERLAND_OBJ)/%.o: $(USERLAND)/%.c | libc
+# Programs are linked against libc.a, so a new sysdep has to relink them. The
+# libc target itself stays order-only: it is phony and would rebuild everything
+# on every run.
+LIBC_ARCHIVE = $(SYSROOT)/usr/lib/libc.a
+
+# The libc headers have to come before the compiler's own. zig cc targets
+# freestanding, so __STDC_HOSTED__ is 0 and clang's limits.h and stdint.h stop
+# short of the include_next that would reach mlibc's.
+LIBC_INCLUDE = -I $(SYSROOT)/usr/include
+
+$(USERLAND_OBJ)/%.o: $(USERLAND)/%.c $(LIBC_ARCHIVE) | libc
 	mkdir -p $(USERLAND_OBJ)
 	PATH="$(MLIBC_PATH)" i686-shadokos-cc \
-		-isystem $(SYSROOT)/usr/include \
+		$(LIBC_INCLUDE) \
 		-c $< -o $@
 
 # zig cc intercepts -lc to provide its own libc, which does not exist for
 # x86-freestanding, so libc.a is passed by path instead.
-$(USERLAND_BIN)/%.elf: $(USERLAND_OBJ)/%.o
+$(USERLAND_BIN)/%: $(USERLAND_OBJ)/%.o $(LIBC_ARCHIVE)
 	mkdir -p $(USERLAND_BIN)
 	PATH="$(MLIBC_PATH)" i686-shadokos-cc -nostdlib \
 		$(SYSROOT)/usr/lib/crt1.o \
@@ -62,6 +72,14 @@ $(USERLAND_BIN)/%.elf: $(USERLAND_OBJ)/%.o
 
 .PHONY: userland
 userland: $(USERLAND_ELF)
+
+# Nothing prunes what a build no longer produces, so a renamed program leaves
+# its old binary behind, here and in the disk image.
+.PHONY: userland-clean
+userland-clean:
+	rm -rf $(USERLAND_OBJ) $(USERLAND_BIN)
+
+fclean: userland-clean
 
 # Test disk mounted as root by the kernel, appended as a partition to kfs.iso.
 # The UUID has to match the one limine.conf passes on the cmdline.
