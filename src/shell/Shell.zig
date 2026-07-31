@@ -43,19 +43,24 @@ pub fn Shell(comptime _builtins: anytype) type {
             .args = undefined,
             .err = null,
         },
-        /// The controlling TTY for this shell.
-        tty: *TtyStruct = undefined,
         hooks: Hooks = Hooks{},
         jobs: std.ArrayList(Job) = .empty,
 
+        /// The terminal this shell talks to. Held by the task rather than here,
+        /// so a builtin and the kernel code it calls resolve the same one
+        /// without being handed a reference.
+        pub inline fn tty(_: *const Self) *TtyStruct {
+            return @import("../device/tty/tty.zig").current();
+        }
+
         /// Reader derived from the TTY.
         pub inline fn reader(self: *const Self) std.io.AnyReader {
-            return self.tty.reader().any();
+            return self.tty().reader().any();
         }
 
         /// Writer derived from the TTY.
         pub inline fn writer(self: *const Self) std.io.AnyWriter {
-            return self.tty.writer().any();
+            return self.tty().writer().any();
         }
 
         pub fn init(
@@ -74,7 +79,6 @@ pub fn Shell(comptime _builtins: anytype) type {
             @import("../task/scheduler.zig").get_current_task().controlling_tty = tty_ref;
 
             var ret = Self{
-                .tty = tty_ref,
                 .config = config,
             };
             if (hooks.on_init) |h| ret.hooks.on_init = @ptrCast(@alignCast(h));

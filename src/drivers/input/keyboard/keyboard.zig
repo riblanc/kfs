@@ -24,6 +24,8 @@ pub const KeyState = struct {
     num_down: bool = false,
     caps_down: bool = false,
     alt_lock: bool = false,
+    console_left_down: bool = false,
+    console_right_down: bool = false,
 };
 
 pub const KeyLocks = packed struct {
@@ -98,18 +100,25 @@ fn make_break(scancode: u16) ?u16 {
                 locks.num_lock = !locks.num_lock;
             keyState.num_down = make;
         },
-        keymap.PGUP, keymap.PGDN => if (make) {
+        keymap.PGUP, keymap.PGDN, keymap.CUP, keymap.CDOWN => if (make) {
             if (!@import("build_options").posix) {
                 const con = &vt_console.consoles[tty.current_tty];
-                if (keyState.shift) {
-                    con.scroll(if (c == keymap.PGUP) vt_console.height else -vt_console.height);
-                } else {
-                    con.scroll(if (c == keymap.PGUP) 1 else -1);
-                }
+                const up = c == keymap.PGUP or c == keymap.CUP;
+                const lines: i32 = if (keyState.shift) vt_console.height else 1;
+                con.scroll(if (up) lines else -lines);
             } else return c;
         },
-        keymap.AF1...keymap.AF10 => if (!make) {
-            tty.set_tty(@intCast(c - keymap.AF1)) catch {};
+        // On the way down and only once: held keys repeat, and a repeat here
+        // would run through every console.
+        keymap.CLEFT => {
+            if (make and !keyState.console_left_down)
+                tty.cycle_tty(-1);
+            keyState.console_left_down = make;
+        },
+        keymap.CRIGHT => {
+            if (make and !keyState.console_right_down)
+                tty.cycle_tty(1);
+            keyState.console_right_down = make;
         },
         else => if (make and c != 0) {
             if (!@import("build_options").posix) {

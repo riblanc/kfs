@@ -64,6 +64,13 @@ pub fn get_tty() *TtyStruct {
     return &tty_array[current_tty];
 }
 
+/// Step to the next or previous console, wrapping at both ends. Serial slots
+/// are skipped: nothing displays them, so there is nothing to switch to.
+pub fn cycle_tty(step: i8) void {
+    const next = @mod(@as(i16, current_tty) + step, @as(i16, num_consoles));
+    set_tty(@intCast(next)) catch {};
+}
+
 /// Switch active console (only console slots are valid).
 pub fn set_tty(n: u8) !void {
     if (n >= num_consoles)
