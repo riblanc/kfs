@@ -694,26 +694,31 @@ pub fn readlink(shell: anytype, args: [][]u8) CmdError!void {
 }
 
 pub fn write(shell: anytype, args: [][]u8) CmdError!void {
-    if (args.len != 4) return CmdError.InvalidNumberOfArguments;
+    if (args.len != 3 and args.len != 4) return CmdError.InvalidNumberOfArguments;
 
-    const offset = std.fmt.parseInt(usize, args[3], 0) catch {
+    const offset = if (args.len == 4) std.fmt.parseInt(usize, args[3], 0) catch {
         utils.print_error(shell, "Invalid offset", .{});
         return CmdError.OtherError;
-    };
+    } else 0;
     const data = args[2];
     const file_tnode = vfs.resolve(args[1]) catch {
         utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
         return CmdError.OtherError;
     };
 
-    if (file_tnode.inode.mode.type != .Regular) {
-        utils.print_error(shell, "Invalid path: {s} is not a regular file", .{args[1]});
-        return CmdError.OtherError;
+    switch (file_tnode.inode.mode.type) {
+        .Regular, .Character => {},
+        else => {
+            utils.print_error(shell, "Invalid path: {s} is neither a regular file nor a device", .{args[1]});
+            return CmdError.OtherError;
+        },
     }
 
     const file = try translate_errno(shell, file_tnode.inode.open());
     defer file.close() catch {};
-    _ = try translate_errno(shell, file.seek(offset, .Set));
+    // A character device has nowhere to seek to, and ignores the position.
+    if (file_tnode.inode.mode.type == .Regular)
+        _ = try translate_errno(shell, file.seek(offset, .Set));
     shell.print("{} bytes written\n", .{try translate_errno(shell, file.write(data))});
 }
 
