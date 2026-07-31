@@ -335,7 +335,9 @@ pub fn alloc_block(self: *Self, first_ino: ext2.Ino) AllocationError!ext2.BlockA
 
     const bitmap = BitSet{ .buffer = bitmap_buffer };
 
-    const total_groups = self.vfs.blocks / self.block_per_group;
+    // Rounded up: the last group is almost always short of a full span, and a
+    // filesystem smaller than one group would otherwise come out with none.
+    const total_groups = std.math.divCeil(usize, self.vfs.blocks, self.block_per_group) catch unreachable;
     const inode_group = first_ino / self.inode_per_group;
 
     //todo: check caller uid somewhere
@@ -376,7 +378,7 @@ pub fn alloc_inode(self: *Self, first_ino: ext2.Ino) AllocationError!ext2.Ino {
 
     const bitmap = BitSet{ .buffer = bitmap_buffer };
 
-    const total_groups = self.vfs.blocks / self.block_per_group;
+    const total_groups = std.math.divCeil(usize, self.vfs.blocks, self.block_per_group) catch unreachable;
     const inode_group = first_ino / self.inode_per_group;
 
     for (0..total_groups) |i| {
