@@ -31,6 +31,7 @@ pub fn do_raw() void {
     };
 
     new_task.clone_vm(current_task) catch @panic("todo errno");
+    new_task.clone_files(current_task);
     new_task.ucontext = current_task.ucontext;
     new_task.tls_base = current_task.tls_base;
 

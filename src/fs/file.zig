@@ -94,8 +94,21 @@ pub fn destroy(self: *Self) void {
     cache.allocator().destroy(self);
 }
 
+/// Take a second handle on the same open file. Both see one position and one
+/// inode, which is what dup and fork are meant to give.
+pub fn get_ref(self: *Self) *Self {
+    self.refs += 1;
+    return self;
+}
+
+/// Give a handle back. The file underneath is only let go with the last one.
 pub fn close(self: *Self) Error.close!void {
-    return self.vtable.close(self);
+    std.debug.assert(self.refs > 0);
+    self.refs -= 1;
+    if (self.refs != 0)
+        return;
+    try self.vtable.close(self);
+    destroy(self);
 }
 
 pub fn read(self: *Self, buffer: []u8) Error.read!usize {

@@ -438,6 +438,14 @@ pub const TaskDescriptor = struct {
         return self.files[@intCast(fd)];
     }
 
+    /// The child shares the parent's open files rather than reopening them, so
+    /// a read in either one advances the position both of them see.
+    pub fn clone_files(self: *Self, parent: *Self) void {
+        for (parent.files[0..], self.files[0..]) |source, *destination| {
+            destination.* = if (source) |file| file.get_ref() else null;
+        }
+    }
+
     pub fn add_file(self: *Self, file: *File) ?Fd {
         // todo: remove minimum 3 when we have tty char devices
         for (self.files[3..], 3..) |*f, fd| {
