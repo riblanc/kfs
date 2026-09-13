@@ -295,7 +295,7 @@ pub fn print_status(shell: anytype, pid: i32, status: @import("../task/wait.zig"
             .{
                 pid,
                 status.value,
-                @tagName(@as(SignalId, @enumFromInt(status.value))),
+                @as(SignalId, @enumFromInt(status.value)).name(),
             },
         ),
         .Stopped => shell.print(
@@ -303,7 +303,7 @@ pub fn print_status(shell: anytype, pid: i32, status: @import("../task/wait.zig"
             .{
                 pid,
                 status.value,
-                @tagName(@as(SignalId, @enumFromInt(status.value))),
+                @as(SignalId, @enumFromInt(status.value)).name(),
             },
         ),
         .Continued => shell.print(
@@ -311,7 +311,7 @@ pub fn print_status(shell: anytype, pid: i32, status: @import("../task/wait.zig"
             .{
                 pid,
                 status.value,
-                @tagName(@as(SignalId, @enumFromInt(status.value))),
+                @as(SignalId, @enumFromInt(status.value)).name(),
             },
         ),
     }

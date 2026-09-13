@@ -25,12 +25,9 @@ pub const Stat = extern struct {
     ctim : TimeSpec,  // Last file status change timestamp.
 };
 
-// todo: should be Off
-pub fn do(path: [*:0]const u8, dst : *Stat) !void {
-    const tnode = try vfs.resolve(std.mem.span(path));
-    defer tnode.release();
-    const inode = tnode.inode;
-    dst.* = .{
+/// What both stat and fstat report about an inode.
+pub fn of(inode: *Inode) Stat {
+    return .{
         .dev = inode.superblock.partition.devt,
         .gid = inode.gid,
         .ino = inode.ino,
@@ -42,4 +39,11 @@ pub fn do(path: [*:0]const u8, dst : *Stat) !void {
         .mtim = undefined,
         .ctim = undefined,
     };
+}
+
+// todo: should be Off
+pub fn do(path: [*:0]const u8, dst : *Stat) !void {
+    const tnode = try vfs.resolve(std.mem.span(path));
+    defer tnode.release();
+    dst.* = of(tnode.inode);
 }

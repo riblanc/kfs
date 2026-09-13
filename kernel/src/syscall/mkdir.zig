@@ -27,7 +27,7 @@ pub fn do(path: [*:0]const u8, mode: Mode) Errno!void {
     const inode = try dir_tnode.inode.superblock.create_inode(
         0,
         0,
-        mode.to_vfs(.Directory),
+        @import("open.zig").masked(mode).to_vfs(.Directory),
         .{ .Directory = .{ .parent_ino = dir_tnode.inode } },
     );
     defer inode.release();

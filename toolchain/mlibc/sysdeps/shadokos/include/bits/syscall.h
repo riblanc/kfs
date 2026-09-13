@@ -54,7 +54,21 @@ done | sort -k3 -g
 #define SYS_CHDIR 52
 #define SYS_PIPE 53
 #define SYS_FCNTL 54
+#define SYS_MOUNT 55
+#define SYS_UNMOUNT 56
 #define SYS_STAT 57
+#define SYS_SETUID 58
+#define SYS_SETGID 59
+#define SYS_SETEUID 60
+#define SYS_SETEGID 61
+#define SYS_SETRESUID 62
+#define SYS_SETRESGID 63
+#define SYS_GETRESUID 64
+#define SYS_GETRESGID 65
+#define SYS_SIGPROCMASK 66
+#define SYS_SIGSUSPEND 67
+#define SYS_FSTAT 68
+#define SYS_UMASK 69
 
 
 

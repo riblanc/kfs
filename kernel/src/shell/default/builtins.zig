@@ -323,7 +323,7 @@ pub fn kill(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) return CmdError.InvalidNumberOfArguments;
     const pid = std.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter;
     const signal = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
-    @import("../../syscall/kill.zig").do(pid, @enumFromInt(signal)) catch return CmdError.InvalidParameter;
+    @import("../../syscall/kill.zig").do(pid, signal) catch return CmdError.InvalidParameter;
 }
 
 pub fn pstree(shell: anytype, _: [][]u8) CmdError!void {

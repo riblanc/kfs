@@ -3,11 +3,12 @@ const signal = @import("../task/signal.zig");
 
 pub const Id = 11;
 
-pub fn do(id: signal.Id, act: ?*signal.Sigaction, oldact: ?*signal.Sigaction) !void {
-    if (oldact) |oldact_ptr| {
-        oldact_ptr.* = scheduler.get_current_task().signalManager.get_action(id);
-    }
-    if (act) |act_ptr| {
-        scheduler.get_current_task().signalManager.change_action(id, act_ptr.*) catch @panic("todo");
-    }
+/// Read and set what a signal does, POSIX sigaction. A number that names no
+/// signal, or one that cannot be caught, is refused rather than acted on.
+pub fn do(signo: u32, act: ?*signal.Sigaction, oldact: ?*signal.Sigaction) !void {
+    const id = signal.Id.from(signo) orelse return error.EINVAL;
+    const manager = &scheduler.get_current_task().signalManager;
+
+    if (oldact) |out| out.* = manager.get_action(id);
+    if (act) |new| try manager.change_action(id, new.*);
 }

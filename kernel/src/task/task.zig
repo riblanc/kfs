@@ -61,8 +61,13 @@ pub const TaskDescriptor = struct {
 
     uid: u32 = 0,
     euid: u32 = 0,
+    suid: u32 = 0,
     gid: u32 = 0,
     egid: u32 = 0,
+    sgid: u32 = 0,
+
+    /// Permission bits denied to files this task creates, POSIX umask.
+    umask: u32 = 0o022,
 
     cwd: *TNode,
     // cwd_str: []u8,
@@ -104,6 +109,14 @@ pub const TaskDescriptor = struct {
     };
     pub const Pid = i32;
     pub const Self = @This();
+
+    /// uid_t is unsigned, so POSIX spells "leave this id alone" as (uid_t)-1.
+    pub const ID_UNCHANGED: u32 = ~@as(u32, 0);
+
+    /// Whether the task may hand itself any user or group id it asks for.
+    pub fn is_privileged(self: *const Self) bool {
+        return self.euid == 0;
+    }
 
     pub var cache: *Cache = undefined;
 

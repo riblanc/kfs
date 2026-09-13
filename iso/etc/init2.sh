@@ -1,7 +1,8 @@
 #!/bin/dash
 
-exec </dev/tty0 >>/dev/tty0 2>>/dev/tty0
+exec <$1 >>$1 2>>$1
+stty icanon echo echoctl
 
-echo bonjour
+echo $1 "(pid: $$)"
 
 exec dash

@@ -74,9 +74,10 @@ void Sysdeps<LibcPanic>::operator()() {
 	__builtin_trap();
 }
 
-int Sysdeps<Isatty>::operator()(int) {
-	// No file descriptor layer yet: everything is the tty.
-	return 0;
+int Sysdeps<Isatty>::operator()(int fd) {
+	// Only a terminal answers tcgetattr; every other file gets ENOTTY.
+	struct termios attr;
+	return sc_error(sc(SYS_TCGETATTR, fd, &attr));
 }
 
 int Sysdeps<Write>::operator()(int fd, void const *buf, size_t size, ssize_t *bytes_written) {
@@ -168,12 +169,13 @@ int Sysdeps<FutexWait>::operator()(int *, int, timespec const *) { return 0; }
 
 int Sysdeps<FutexWake>::operator()(int *, bool) { return 0; }
 
-uid_t Sysdeps<GetUid>::operator()() { return sc_error(sc(SYS_GETUID)); }
-uid_t Sysdeps<GetEuid>::operator()() { return sc_error(sc(SYS_GETEUID)); }
-gid_t Sysdeps<GetGid>::operator()() { return sc_error(sc(SYS_GETGID)); }
-gid_t Sysdeps<GetEgid>::operator()() { return sc_error(sc(SYS_GETEGID)); }
-pid_t Sysdeps<GetPid>::operator()() { return sc_error(sc(SYS_GETPID)); }
-pid_t Sysdeps<GetPpid>::operator()() { return sc_error(sc(SYS_GETPPID)); }
+// These sysdeps return the id itself, never an error code.
+uid_t Sysdeps<GetUid>::operator()() { return sc(SYS_GETUID); }
+uid_t Sysdeps<GetEuid>::operator()() { return sc(SYS_GETEUID); }
+gid_t Sysdeps<GetGid>::operator()() { return sc(SYS_GETGID); }
+gid_t Sysdeps<GetEgid>::operator()() { return sc(SYS_GETEGID); }
+pid_t Sysdeps<GetPid>::operator()() { return sc(SYS_GETPID); }
+pid_t Sysdeps<GetPpid>::operator()() { return sc(SYS_GETPPID); }
 
 int Sysdeps<GetCwd>::operator()(char *buf, size_t size) {
 	auto ret = sc(SYS_GETCWD, buf, size);
@@ -258,13 +260,19 @@ int Sysdeps<Ioctl>::operator()(int fd, unsigned long request, void *arg, int *re
 	return 0;
 }
 
-int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int , const char *path, int flags, struct stat *statbuf) {
-	__ensure(!flags);
-	__ensure(fsfdt == fsfd_target::path);
-	auto ret = sc(SYS_STAT, path, statbuf);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
+int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int fd, const char *path, int flags, struct stat *statbuf) {
+	// AT_SYMLINK_NOFOLLOW has no kernel side yet, so lstat answers for the
+	// target of a link rather than for the link.
+	(void)flags;
+
+	switch (fsfdt) {
+		case fsfd_target::path:
+			return sc_error(sc(SYS_STAT, path, statbuf));
+		case fsfd_target::fd:
+			return sc_error(sc(SYS_FSTAT, fd, statbuf));
+		default:
+			return ENOSYS;
+	}
 }
 
 int Sysdeps<Waitpid>::operator()(pid_t pid, int *status, int flags, struct rusage *ru, pid_t *ret_pid) {
@@ -284,42 +292,25 @@ int Sysdeps<Tcgetattr>::operator()(int fd, struct termios *attr) {
 }
 
 int Sysdeps<Tcsetattr>::operator()(int fd, int optional_action, const struct termios *attr) {
-	__ensure(optional_action);
-
-	auto ret = sc(SYS_TCSETATTR, fd, 0, attr);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
+	return sc_error(sc(SYS_TCSETATTR, fd, optional_action, attr));
 }
 
 
-// int Sysdeps<Tcsendbreak>::operator()(int fd, int) {
-// 	auto ret = sc(SYS_IOCTL, fd, TCSBRK, 0);
-// 	if (int e = sc_error(ret); e)
-// 		return e;
-// 	return 0;
-// }
-//
-// int Sysdeps<Tcflow>::operator()(int fd, int action) {
-// 	auto ret = sc(SYS_IOCTL, fd, TCXONC, action);
-// 	if (int e = sc_error(ret); e)
-// 		return e;
-// 	return 0;
-// }
-//
-// int Sysdeps<Tcflush>::operator()(int fd, int queue) {
-// 	auto ret = sc(SYS_IOCTL, fd, TCFLSH, queue);
-// 	if (int e = sc_error(ret); e)
-// 		return e;
-// 	return 0;
-// }
-//
-// int Sysdeps<Tcdrain>::operator()(int fd) {
-// 	auto ret = sc(SYS_IOCTL, fd, TCSBRK, 1);
-// 	if (int e = sc_error(ret); e)
-// 		return e;
-// 	return 0;
-// }
+int Sysdeps<Tcsendbreak>::operator()(int fd, int duration) {
+	return sc_error(sc(SYS_TCSENDBREAK, fd, duration));
+}
+
+int Sysdeps<Tcflow>::operator()(int fd, int action) {
+	return sc_error(sc(SYS_TCFLOW, fd, action));
+}
+
+int Sysdeps<Tcflush>::operator()(int fd, int queue) {
+	return sc_error(sc(SYS_TCFLUSH, fd, queue));
+}
+
+int Sysdeps<Tcdrain>::operator()(int fd) {
+	return sc_error(sc(SYS_TCDRAIN, fd, 0));
+}
 
 
 int Sysdeps<SetSid>::operator()(pid_t *sid) {
@@ -331,71 +322,76 @@ int Sysdeps<SetSid>::operator()(pid_t *sid) {
 }
 
 int Sysdeps<SetUid>::operator()(uid_t id) {
-	long ret;
-	return syscall(SYSCALL_SETUID, &ret, id);
+	return sc_error(sc(SYS_SETUID, id));
 }
 
 int Sysdeps<SetGid>::operator()(gid_t id) {
-	long ret;
-	return syscall(SYSCALL_SETGID, &ret, id);
+	return sc_error(sc(SYS_SETGID, id));
 }
 
 int Sysdeps<SetEuid>::operator()(uid_t id) {
-	long ret;
-	return syscall(SYSCALL_SETEUID, &ret, id);
+	return sc_error(sc(SYS_SETEUID, id));
 }
 
 int Sysdeps<SetEgid>::operator()(gid_t id) {
-	long ret;
-	return syscall(SYSCALL_SETEGID, &ret, id);
+	return sc_error(sc(SYS_SETEGID, id));
 }
 
-uid_t Sysdeps<GetUid>::operator()() {
-	uid_t r, e, s;
-	sysdep<GetResuid>(&r, &e, &s);
-
-	return r;
+int Sysdeps<SetResuid>::operator()(uid_t ruid, uid_t euid, uid_t suid) {
+	return sc_error(sc(SYS_SETRESUID, ruid, euid, suid));
 }
 
-uid_t Sysdeps<GetEuid>::operator()() {
-	uid_t r, e, s;
-	sysdep<GetResuid>(&r, &e, &s);
-
-	return e;
+int Sysdeps<SetResgid>::operator()(gid_t rgid, gid_t egid, gid_t sgid) {
+	return sc_error(sc(SYS_SETRESGID, rgid, egid, sgid));
 }
 
-gid_t Sysdeps<GetGid>::operator()() {
-	gid_t r, e, s;
-	sysdep<GetResgid>(&r, &e, &s);
-
-	return r;
+int Sysdeps<GetResuid>::operator()(uid_t *ruid, uid_t *euid, uid_t *suid) {
+	return sc_error(sc(SYS_GETRESUID, ruid, euid, suid));
 }
 
-gid_t Sysdeps<GetEgid>::operator()() {
-	gid_t r, e, s;
-	sysdep<GetResgid>(&r, &e, &s);
-
-	return e;
+int Sysdeps<GetResgid>::operator()(gid_t *rgid, gid_t *egid, gid_t *sgid) {
+	return sc_error(sc(SYS_GETRESGID, rgid, egid, sgid));
 }
 
-	int Sysdeps<SetResuid>::operator()(uid_t _ruid, uid_t _euid, uid_t _suid) {
-	long ret;
-	return syscall(SYSCALL_SETRESUID, &ret, _ruid, _euid, _suid);
+int Sysdeps<Kill>::operator()(pid_t pid, int signal) {
+	return sc_error(sc(SYS_KILL, pid, signal));
 }
 
-	int Sysdeps<SetResgid>::operator()(gid_t _rgid, gid_t _egid, gid_t _sgid) {
-	long ret;
-	return syscall(SYSCALL_SETRESGID, &ret, _rgid, _egid, _sgid);
+int Sysdeps<SetPgid>::operator()(pid_t pid, pid_t pgid) {
+	return sc_error(sc(SYS_SETPGID, pid, pgid));
 }
 
-	int Sysdeps<GetResuid>::operator()(uid_t *ruid, uid_t *euid, uid_t *suid) {
-	long ret;
-	return syscall(SYSCALL_GETRESUID, &ret, (uint64_t)ruid, (uint64_t)euid, (uint64_t)suid);
+int Sysdeps<GetPgid>::operator()(pid_t pid, pid_t *pgid) {
+	auto ret = sc(SYS_GETPGID, pid);
+	if (int e = sc_error(ret); e)
+		return e;
+	*pgid = ret;
+	return 0;
 }
 
-	int Sysdeps<GetResgid>::operator()(gid_t *rgid, gid_t *egid, gid_t *sgid) {
-	long ret;
-	return syscall(SYSCALL_GETRESGID, &ret, (uint64_t)rgid, (uint64_t)egid, (uint64_t)sgid);
+int Sysdeps<GetSid>::operator()(pid_t pid, pid_t *sid) {
+	auto ret = sc(SYS_GETSID, pid);
+	if (int e = sc_error(ret); e)
+		return e;
+	*sid = ret;
+	return 0;
+}
+
+int Sysdeps<Sigprocmask>::operator()(int how, const sigset_t *set, sigset_t *retrieve) {
+	return sc_error(sc(SYS_SIGPROCMASK, how, set, retrieve));
+}
+
+int Sysdeps<Sigsuspend>::operator()(const sigset_t *set) {
+	// Always fails, EINTR once a handler has run.
+	return sc_error(sc(SYS_SIGSUSPEND, set));
+}
+
+int Sysdeps<Umask>::operator()(mode_t mode, mode_t *old) {
+	auto ret = sc(SYS_UMASK, mode);
+	if (int e = sc_error(ret); e)
+		return e;
+	*old = ret;
+	return 0;
 }
 
 } // namespace mlibc

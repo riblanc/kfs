@@ -2,7 +2,8 @@
 DOCKER=docker run -v .:/mount -it shadok
 
 
-all: bin/dash bin/mount bin/su bin/cat bin/setsid bin/whoami
+all: bin/dash bin/mount bin/su bin/cat bin/setsid bin/whoami bin/stty bin/clear
+	$(DOCKER) strip bin/dash bin/mount bin/su bin/cat bin/setsid bin/whoami bin/stty bin/clear
 
 dash/Makefile:
 	$(DOCKER) bash -c "cd dash; ./autogen.sh ; CC=/toolchain/usr/bin/i686-shadokos-gcc ./configure --host=/toolchain/usr/bin/i686-shadokos-gcc"
@@ -16,6 +17,7 @@ bin/dash: dash/src/dash
 bin/su: su/su.c
 	$(DOCKER) i686-shadokos-gcc $< -o $@
 
+
 bin/mount: mount/mount.c
 	$(DOCKER) i686-shadokos-gcc $< -o $@
 
@@ -27,3 +29,10 @@ bin/setsid: setsid/setsid.c
 
 bin/whoami: whoami/whoami.c
 	$(DOCKER) i686-shadokos-gcc $< -o $@
+
+bin/stty: stty/stty.c
+	$(DOCKER) i686-shadokos-gcc $< -o $@
+
+bin/clear: clear/clear.c
+	# strip
+	$(DOCKER) i686-shadokos-gcc $< -o $@ -s

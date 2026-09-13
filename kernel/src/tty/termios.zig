@@ -128,7 +128,9 @@ pub const termios = struct {
     c_iflag: iflags = .{ .BRKINT = true, .ICRNL = true, .IXON = true },
     c_oflag: oflags = .{ .OPOST = true, .ONLCR = true },
     c_cflag: cflags = .{ .CREAD = true, .CLOCAL = true },
-    c_lflag: lflags = .{ .ISIG = true, .ICANON = true, .ECHO = true, .IEXTEN = true, .ECHOE = true, .ECHOK = true },
+    // ECHOCTL: a control character shown as ^X rather than sent to the
+    // screen, which would act on the escape sequence instead of showing it.
+    c_lflag: lflags = .{ .ISIG = true, .ICANON = true, .ECHO = true, .IEXTEN = true, .ECHOE = true, .ECHOK = true, .ECHOCTL = true },
     c_cc: [NCCS]cc_t = .{
         keymap.C('D'),
         keymap.C('@'),

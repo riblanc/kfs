@@ -5,8 +5,12 @@ const task = @import("../task/task.zig");
 const task_set = @import("../task/task_set.zig");
 const Errno = @import("../errno.zig").Errno;
 
-// todo: invalid id
-pub fn do(pid: task.TaskDescriptor.Pid, id: signal.Id) !void {
+/// Send a signal, POSIX kill. Signal zero sends nothing and only says whether
+/// the target could be reached.
+pub fn do(pid: task.TaskDescriptor.Pid, signo: u32) !void {
+    if (signo == 0) return probe(pid);
+    const id = signal.Id.from(signo) orelse return Errno.EINVAL;
+
     if (pid > 0) {
         const descriptor = task_set.get_task_descriptor(pid) orelse return Errno.ESRCH;
         // todo permisssion
@@ -26,5 +30,16 @@ pub fn do(pid: task.TaskDescriptor.Pid, id: signal.Id) !void {
         var info = signal.siginfo_t.init(.{ .user = id });
         info.si_pid = scheduler.get_current_task().pid;
         if (task_set.send_signal_to_group(-pid, info) == 0) return Errno.ESRCH;
+    }
+}
+
+/// Whether a signal could be sent, without sending one.
+fn probe(pid: task.TaskDescriptor.Pid) Errno!void {
+    if (pid > 0) {
+        _ = task_set.get_task_descriptor(pid) orelse return Errno.ESRCH;
+    } else if (pid == 0) {
+        if (task_set.find_in_group(scheduler.get_current_task().pgid) == null) return Errno.ESRCH;
+    } else if (pid < -1) {
+        if (task_set.find_in_group(-pid) == null) return Errno.ESRCH;
     }
 }

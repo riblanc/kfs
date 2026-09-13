@@ -1,145 +1,99 @@
 #ifndef _ABIBITS_TERMIOS_H
 #define _ABIBITS_TERMIOS_H
 
+/* The ShadokOS terminal ABI. This file is the userspace half of
+ * kernel/src/tty/termios.zig `abi`: the layout below is what TCGETS fills in
+ * and what TCSETS reads back, so the two are changed together or not at all.
+ *
+ * A flag marked "declared only" is accepted and stored, and changes nothing
+ * about how the terminal behaves.
+ */
+
 typedef unsigned char cc_t;
 typedef unsigned int speed_t;
 typedef unsigned int tcflag_t;
 
 /* indices for the c_cc array in struct termios */
-#define NCCS     32
-#define VINTR    0
-#define VQUIT    1
-#define VERASE   2
-#define VKILL    3
-#define VEOF     4
-#define VTIME    5
-#define VMIN     6
-#define VSWTC    7
-#define VSTART   8
-#define VSTOP    9
-#define VSUSP    10
-#define VEOL     11
-#define VREPRINT 12
-#define VDISCARD 13
-#define VWERASE  14
-#define VLNEXT   15
-#define VEOL2    16
+#define NCCS   11
+#define VEOF   0
+#define VEOL   1
+#define VERASE 2
+#define VINTR  3
+#define VKILL  4
+#define VMIN   5
+#define VQUIT  6
+#define VSTART 7
+#define VSTOP  8
+#define VSUSP  9
+#define VTIME  10
 
 /* bitwise flags for c_iflag in struct termios */
-#define IGNBRK 0000001
-#define BRKINT 0000002
-#define IGNPAR 0000004
-#define PARMRK 0000010
-#define INPCK 0000020
-#define ISTRIP 0000040
-#define INLCR 0000100
-#define IGNCR 0000200
-#define ICRNL 0000400
-#define IUCLC 0001000
-#define IXON 0002000
-#define IXANY 0004000
-#define IXOFF 0010000
-#define IMAXBEL 0020000
-#define IUTF8 0040000
+#define ISTRIP (1 << 0)
+#define ICRNL  (1 << 1)
+#define INLCR  (1 << 2)
+#define IGNCR  (1 << 3)
+/* declared only */
+#define BRKINT (1 << 4)
+#define IGNBRK (1 << 5)
+#define IGNPAR (1 << 6)
+#define INPCK  (1 << 7)
+#define PARMRK (1 << 8)
+#define IXON   (1 << 9)
+#define IXOFF  (1 << 10)
+#define IXANY  (1 << 11)
 
 /* bitwise flags for c_oflag in struct termios */
-#define OPOST 0000001
-#define OLCUC 0000002
-#define ONLCR 0000004
-#define OCRNL 0000010
-#define ONOCR 0000020
-#define ONLRET 0000040
-#define OFILL 0000100
-#define OFDEL 0000200
+#define OPOST  (1 << 0)
+#define ONLCR  (1 << 1)
+#define OCRNL  (1 << 2)
+#define ONLRET (1 << 3)
+/* declared only */
+#define OLCUC  (1 << 4)
+#define ONOCR  (1 << 5)
+#define OFILL  (1 << 6)
+#define OFDEL  (1 << 7)
 
-#if defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || defined(_XOPEN_SOURCE)
+/* bitwise constants for c_cflag in struct termios, none of them honoured:
+ * these describe a line, not a screen. */
+#define CSIZE  (1 << 0)
+#define CSTOPB (1 << 1)
+#define CREAD  (1 << 2)
+#define PARENB (1 << 3)
+#define PARODD (1 << 4)
+#define HUPCL  (1 << 5)
+#define CLOCAL (1 << 6)
 
-#define NLDLY 0000400
-#define NL0 0000000
-#define NL1 0000400
-
-#define CRDLY 0003000
-#define CR0 0000000
-#define CR1 0001000
-#define CR2 0002000
-#define CR3 0003000
-
-#define TABDLY 0014000
-#define TAB0 0000000
-#define TAB1 0004000
-#define TAB2 0010000
-#define TAB3 0014000
-
-#define BSDLY 0020000
-#define BS0 0000000
-#define BS1 0020000
-
-#define FFDLY 0100000
-#define FF0 0000000
-#define FF1 0100000
-
-#endif
-
-#define VTDLY 0040000
-#define VT0 0000000
-#define VT1 0040000
-
-/* bitwise constants for c_cflag in struct termios */
-#define CSIZE 0000060
-#define CS5 0000000
-#define CS6 0000020
-#define CS7 0000040
-#define CS8 0000060
-
-#define CSTOPB 0000100
-#define CREAD 0000200
-#define PARENB 0000400
-#define PARODD 0001000
-#define HUPCL 0002000
-#define CLOCAL 0004000
+/* Character size does not fit in the single CSIZE bit the kernel keeps, and
+ * the line speed lives in c_ibaud and c_obaud rather than in a c_cflag field.
+ * CBAUD is a corner of c_cflag the kernel ignores, so cfsetospeed has
+ * somewhere to write without disturbing a flag that matters. */
+#define CS5 0
+#define CS6 0
+#define CS7 0
+#define CS8 CSIZE
+#define CBAUD (0xf << 24)
 
 /* bitwise constants for c_lflag in struct termios */
-#define ISIG 0000001
-#define ICANON 0000002
-#define ECHO 0000010
-#define ECHOE 0000020
-#define ECHOK 0000040
-#define ECHONL 0000100
-#define NOFLSH 0000200
-#define TOSTOP 0000400
-#define IEXTEN 0100000
-
-#if defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
-
-#define EXTA    0000016
-#define EXTB    0000017
-#define CBAUD   0010017
-#define CBAUDEX 0010000
-#define CIBAUD  002003600000
-#define CMSPAR  010000000000
-#define CRTSCTS 020000000000
-
-#define XCASE   0000004
-#define ECHOCTL 0001000
-#define ECHOPRT 0002000
-#define ECHOKE  0004000
-#define FLUSHO  0010000
-#define PENDIN  0040000
-#define EXTPROC 0200000
-
-#define XTABS 0014000
-
-#endif
+#define ICANON  (1 << 0)
+#define ECHO    (1 << 1)
+#define ECHOE   (1 << 2)
+#define ECHOK   (1 << 3)
+#define ECHONL  (1 << 4)
+#define ECHOCTL (1 << 5)
+#define ISIG    (1 << 6)
+#define NOFLSH  (1 << 7)
+/* declared only */
+#define IEXTEN  (1 << 8)
+#define TOSTOP  (1 << 9)
 
 struct termios {
 	tcflag_t c_iflag;
 	tcflag_t c_oflag;
 	tcflag_t c_cflag;
 	tcflag_t c_lflag;
-	cc_t c_line;
 	cc_t c_cc[NCCS];
 	speed_t c_ibaud;
 	speed_t c_obaud;
 };
 
-#endif
+#endif /* _ABIBITS_TERMIOS_H */

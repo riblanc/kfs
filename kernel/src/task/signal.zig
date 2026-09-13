@@ -23,7 +23,12 @@ pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callco
 pub const SIG_DFL: Handler = @ptrFromInt(0);
 pub const SIG_IGN: Handler = @ptrFromInt(1);
 
-// ids according to the system V i386 ABI
+/// The numbers mlibc gives userspace in abi-bits/signal.h, which are the ones
+/// Linux uses on i386. A signal crosses the syscall boundary as a plain
+/// number, so the two tables have to agree.
+///
+/// Not exhaustive: a number from userspace is only a signal once `known` says
+/// so, and every path that indexes a task's queues checks that first.
 pub const Id = enum(u32) {
     SIGHUP = 1,
     SIGINT = 2,
@@ -31,31 +36,46 @@ pub const Id = enum(u32) {
     SIGILL = 4,
     SIGTRAP = 5,
     SIGABRT = 6,
-    SIGEMT = 7,
+    SIGBUS = 7,
     SIGFPE = 8,
     SIGKILL = 9,
-    SIGBUS = 10,
+    SIGUSR1 = 10,
     SIGSEGV = 11,
-    SIGSYS = 12,
+    SIGUSR2 = 12,
     SIGPIPE = 13,
     SIGALRM = 14,
     SIGTERM = 15,
-    SIGUSR1 = 16,
-    SIGUSR2 = 17,
-    SIGCHLD = 18,
-    SIGPWR = 19,
-    SIGWINCH = 20,
-    SIGURG = 21,
-    SIGPOLL = 22,
-    SIGSTOP = 23,
-    SIGTSTP = 24,
-    SIGCONT = 25,
-    SIGTTIN = 26,
-    SIGTTOU = 27,
-    SIGVTALRM = 28,
-    SIGPROF = 29,
-    SIGXCPU = 30,
-    SIGXFSZ = 31,
+    SIGSTKFLT = 16,
+    SIGCHLD = 17,
+    SIGCONT = 18,
+    SIGSTOP = 19,
+    SIGTSTP = 20,
+    SIGTTIN = 21,
+    SIGTTOU = 22,
+    SIGURG = 23,
+    SIGXCPU = 24,
+    SIGXFSZ = 25,
+    SIGVTALRM = 26,
+    SIGPROF = 27,
+    SIGWINCH = 28,
+    SIGPOLL = 29,
+    SIGPWR = 30,
+    SIGSYS = 31,
+    _,
+
+    /// The highest number a signal can take, and the size of a task's queues.
+    pub const count = 32;
+
+    /// Turn a number from userspace into a signal, or nothing. Zero is left
+    /// out: kill gives it a meaning of its own.
+    pub fn from(number: u32) ?Id {
+        if (number == 0 or number >= count) return null;
+        return @enumFromInt(number);
+    }
+
+    pub fn name(self: Id) []const u8 {
+        return std.enums.tagName(Id, self) orelse "unknown signal";
+    }
 };
 
 pub const Ill = enum(i32) {
@@ -237,7 +257,7 @@ pub const SignalQueue = struct {
 };
 
 pub const SignalManager = struct {
-    queues: [32]SignalQueue = undefined,
+    queues: [Id.count]SignalQueue = undefined,
     pending: SigSet = 0,
     mutex: Mutex = .{},
     const Self = @This();
@@ -251,6 +271,9 @@ pub const SignalManager = struct {
 
     pub fn init() Self {
         var self = Self{};
+        // Every number, named or not: an unnamed one still reaches the array
+        // through a pending mask, and undefined memory there decides nothing.
+        for (self.queues[0..]) |*queue| queue.* = SignalQueue.init(.Ignore, true);
         self.init_queue(.SIGABRT, .Terminate, true);
         self.init_queue(.SIGALRM, .Terminate, true);
         self.init_queue(.SIGBUS, .Terminate, true);
@@ -279,6 +302,9 @@ pub const SignalManager = struct {
         self.init_queue(.SIGVTALRM, .Terminate, true);
         self.init_queue(.SIGXCPU, .Terminate, true);
         self.init_queue(.SIGXFSZ, .Terminate, true);
+        self.init_queue(.SIGSTKFLT, .Terminate, true);
+        self.init_queue(.SIGPWR, .Terminate, true);
+        self.init_queue(.SIGWINCH, .Ignore, true);
         return self;
     }
 
@@ -302,9 +328,7 @@ pub const SignalManager = struct {
         defer self.mutex.release();
 
         const index: u32 = @intFromEnum(signal.si_signo.unwrap());
-        if (index > self.queues.len) {
-            @panic("todo");
-        }
+        if (index >= self.queues.len) return;
         self.queues[index].queue_signal(signal);
         if (self.queues[index].queue.len() != 0) { // todo: there may be a better way to do this
             self.pending |= @as(SigSet, 1) << @as(u5, @intCast(index));

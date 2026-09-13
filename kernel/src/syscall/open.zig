@@ -32,6 +32,13 @@ pub const Flags = packed struct(u32) {
     };
 };
 
+/// Take the caller's umask out of a mode, POSIX: the bits it holds are the
+/// ones a new file is denied.
+pub fn masked(mode: Mode) Mode {
+    const task = scheduler.get_current_task();
+    return @bitCast(@as(u32, @bitCast(mode)) & ~task.umask);
+}
+
 pub const Mode = packed struct(u32) {
     suid: bool = false,
     sgid: bool = false,
@@ -80,7 +87,7 @@ fn create_file(path_slice: []const u8, flags: Flags, mode: Mode) Errno!*TNode {
         return if (flags.exclusive) Errno.EEXIST else existing;
     }
 
-    const inode = try dir_tnode.inode.superblock.create_inode(0, 0, mode.to_vfs(.Regular), .{ .Regular = {} });
+    const inode = try dir_tnode.inode.superblock.create_inode(0, 0, masked(mode).to_vfs(.Regular), .{ .Regular = {} });
     defer inode.release();
 
     try dir_tnode.inode.link(name, inode);

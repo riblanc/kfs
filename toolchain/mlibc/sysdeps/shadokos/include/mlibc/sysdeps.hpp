@@ -52,10 +52,17 @@ struct ShadokosSysdepTags :
 	SetEuid,
 	SetGid,
 	SetUid,
-    // Tcdrain,
-    // Tcflush,
-    // Tcflow,
-    // Tcsendbreak,
+	Kill,
+	GetPgid,
+	SetPgid,
+	GetSid,
+	Sigprocmask,
+	Sigsuspend,
+	Umask,
+	Tcdrain,
+	Tcflush,
+	Tcflow,
+	Tcsendbreak,
 	// Not implemented (ENOSYS), but the posix/bsd sources dispatch to
 	// them at compile time so the tags have to exist.
 	Recvfrom

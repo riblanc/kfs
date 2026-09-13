@@ -7,7 +7,6 @@ mount /dev .virtual devfs
 
 echo bonjour
 
-exec </dev/tty0 >>/dev/tty0 2>>/dev/tty0
-
-/bin/dash
-#setsid /bin/dash /etc/init2.sh
+while true; do
+  setsid /bin/dash /etc/init2.sh /dev/tty0
+done
